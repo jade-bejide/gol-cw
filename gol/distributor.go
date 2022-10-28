@@ -14,9 +14,9 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
+//counts the number of alive neighbours of a given cell
 func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	liveNeighbours := 0
-
 
 	w := p.ImageWidth - 1
 	h := p.ImageHeight - 1
@@ -44,14 +44,17 @@ func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	return liveNeighbours
 }
 
+//updates the state of a world
 func updateState(isAlive bool, neighbours int) bool {
 	return isAlive && neighbours > 1 && neighbours < 4 || !isAlive && neighbours == 3
 }
 
+//checks if a cell is alive
 func isAlive(x int, y int, world [][]byte) bool {
 	return world[y][x] != 0
 }
 
+//makes a deep copy of a previous world state
 func saveWorld(world [][]byte) [][]byte {
 	cp := make([][]byte, len(world))
 
@@ -63,6 +66,7 @@ func saveWorld(world [][]byte) [][]byte {
 	return cp
 }
 
+//completes one turn of gol
 func calculateNextState(p Params, world [][]byte) [][]byte {
 	x := 0
 	y := 0
@@ -87,6 +91,7 @@ func calculateNextState(p Params, world [][]byte) [][]byte {
 	return worldCpy
 }
 
+//traverses the world and takes the coordinates of any alive cells
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	x := 0
 	y := 0
@@ -97,12 +102,12 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 		y = 0
 		for y < p.ImageHeight {
 			if isAlive(x, y, world) {
-				c:= util.Cell{X: x,Y: y}
+				c:= util.Cell{x, y}
 				cells = append(cells, c)
 			}
 			y += 1
 		}
-		x += 1
+		x+=1
 	}
 
 	return cells
@@ -122,25 +127,17 @@ func distributor(p Params, c distributorChannels) {
 
 	c.ioFilename <- filename
 
-    world := [][]byte{}
-    fmt.Println("here", c.ioFilename)
-    for y := 0; y < p.ImageHeight; y++ {
-        row := make([]byte, p.ImageWidth)
+	world := make([][]byte, p.ImageHeight)
 
-        for x := 0; x < p.ImageWidth; x++ {
-            pixel := <-c.ioInput
-            row = append(row, pixel)
-        }
-
-
-        world = append(world, row)
-    }
-
-    fmt.Println(world)
+	for y := 0; y < p.ImageHeight; y++ {
+	    world[y] = make([]byte, p.ImageWidth)
+		for x := 0; x < p.ImageWidth; x++ {
+		    pixel := <-c.ioInput
+			world[y][x] = pixel
+		}
+	}
 
 	turn := 0
-
-
 	// TODO: Execute all turns of the Game of Life.
 
     for turn = 0; turn < p.Turns; turn++ {
