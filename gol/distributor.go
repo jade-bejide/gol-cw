@@ -2,7 +2,6 @@ package gol
 
 import (
 	"uk.ac.bris.cs/gameoflife/util"
-	"fmt"
 	"strconv"
 )
 type distributorChannels struct {
