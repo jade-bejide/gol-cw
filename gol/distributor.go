@@ -1,9 +1,10 @@
 package gol
 
 import (
-	"uk.ac.bris.cs/gameoflife/util"
 	"strconv"
+	"uk.ac.bris.cs/gameoflife/util"
 )
+
 type distributorChannels struct {
 	events     chan<- Event
 	ioCommand  chan<- ioCommand
@@ -13,6 +14,10 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
+/*
+Distributed part (2)
+	Note that the shared memory solution for Median Filter should be used
+*/
 //counts the number of alive neighbours of a given cell
 func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	liveNeighbours := 0
@@ -25,20 +30,43 @@ func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	u := y + 1
 	d := y - 1
 
-	if l < 0 { l = w }
-	if r > w { r = 0 }
-	if u > h { u = 0 }
-	if d < 0 { d = h }
+	if l < 0 {
+		l = w
+	}
+	if r > w {
+		r = 0
+	}
+	if u > h {
+		u = 0
+	}
+	if d < 0 {
+		d = h
+	}
 
-
-	if world[u][x] == 255 { liveNeighbours += 1 }
-	if world[d][x] == 255 { liveNeighbours += 1 }
-	if world[u][l] == 255 { liveNeighbours += 1 }
-	if world[u][r] == 255 { liveNeighbours += 1 }
-	if world[d][l] == 255 { liveNeighbours += 1 }
-	if world[d][r] == 255 { liveNeighbours += 1 }
-	if world[y][l] == 255 { liveNeighbours += 1 }
-	if world[y][r] == 255 { liveNeighbours += 1 }
+	if world[u][x] == 255 {
+		liveNeighbours += 1
+	}
+	if world[d][x] == 255 {
+		liveNeighbours += 1
+	}
+	if world[u][l] == 255 {
+		liveNeighbours += 1
+	}
+	if world[u][r] == 255 {
+		liveNeighbours += 1
+	}
+	if world[d][l] == 255 {
+		liveNeighbours += 1
+	}
+	if world[d][r] == 255 {
+		liveNeighbours += 1
+	}
+	if world[y][l] == 255 {
+		liveNeighbours += 1
+	}
+	if world[y][r] == 255 {
+		liveNeighbours += 1
+	}
 
 	return liveNeighbours
 }
@@ -80,7 +108,11 @@ func calculateNextState(p Params, world [][]byte) [][]byte {
 
 			alive = updateState(alive, neighbours)
 
-			if alive { worldCpy[y][x] = 255 } else { worldCpy[y][x] = 0 }
+			if alive {
+				worldCpy[y][x] = 255
+			} else {
+				worldCpy[y][x] = 0
+			}
 
 			y += 1
 		}
@@ -101,12 +133,12 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 		y = 0
 		for y < p.ImageHeight {
 			if isAlive(x, y, world) {
-				c:= util.Cell{x, y}
+				c := util.Cell{x, y}
 				cells = append(cells, c)
 			}
 			y += 1
 		}
-		x+=1
+		x += 1
 	}
 
 	return cells
@@ -116,7 +148,7 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 func distributor(p Params, c distributorChannels) {
 	// TODO: Create a 2D slice to store the world.
 
-	c.ioCommand <- ioInput
+	c.ioCommand <- ioInput //send the appropriate command... (jump ln155)
 	filename := ""
 	wStr := strconv.Itoa(p.ImageWidth)
 	hStr := strconv.Itoa(p.ImageHeight)
@@ -124,14 +156,14 @@ func distributor(p Params, c distributorChannels) {
 	filename += "x"
 	filename += hStr
 
-	c.ioFilename <- filename
+	c.ioFilename <- filename //...then send to distributor channel
 
 	world := make([][]byte, p.ImageHeight)
 
 	for y := 0; y < p.ImageHeight; y++ {
-	    world[y] = make([]byte, p.ImageWidth)
+		world[y] = make([]byte, p.ImageWidth)
 		for x := 0; x < p.ImageWidth; x++ {
-		    pixel := <-c.ioInput
+			pixel := <-c.ioInput //gets image in with the io.goroutine
 			world[y][x] = pixel
 		}
 	}
@@ -139,22 +171,22 @@ func distributor(p Params, c distributorChannels) {
 	turn := 0
 	// TODO: Execute all turns of the Game of Life.
 
-    for turn = 0; turn < p.Turns; turn++ {
-        world = calculateNextState(p, world)
-    }
+	for turn = 0; turn < p.Turns; turn++ {
+		world = calculateNextState(p, world)
+	}
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	aliveCells := calculateAliveCells(p, world)
-    final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: aliveCells}
+	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: aliveCells}
 
-    c.events <- final
+	c.events <- final //sending event down events channel
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 
 	c.events <- StateChange{turn, Quitting}
-	
+
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }
