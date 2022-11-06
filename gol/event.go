@@ -16,6 +16,7 @@ type Event interface {
 
 // AliveCellsCount is an Event notifying the user about the number of currently alive cells.
 // This Event should be sent every 2s.
+// Use in step 3
 type AliveCellsCount struct { // implements Event
 	CompletedTurns int
 	CellsCount     int
@@ -62,9 +63,9 @@ type TurnComplete struct { // implements Event
 // FinalTurnComplete is an Event notifying the testing framework about the new world state after execution finished.
 // The data included with this Event is used directly by the tests.
 // SDL closes the window when this Event is sent.
-type FinalTurnComplete struct {
+type FinalTurnComplete struct { // implements Event, so it already implements what event implements (see below)
 	CompletedTurns int
-	Alive          []util.Cell
+	Alive          []util.Cell //alice of alive cells that contain x, y coordinates once game finishes evolving
 }
 
 // String methods allow the different types of Events and States to be printed.

@@ -33,7 +33,7 @@ func main() {
 		"Specify the height of the image. Defaults to 512.")
 
 	flag.IntVar(
-		&params.Turns,
+		&params.Turns, //number of times you run the algorithm on the input image
 		"turns",
 		10000000000,
 		"Specify the number of turns to process. Defaults to 10000000000.")
@@ -49,10 +49,10 @@ func main() {
 	fmt.Println("Width:", params.ImageWidth)
 	fmt.Println("Height:", params.ImageHeight)
 
-	keyPresses := make(chan rune, 10)
+	keyPresses := make(chan rune, 10) //captured by sdl window
 	events := make(chan gol.Event, 1000)
 
-	go gol.Run(params, events, keyPresses)
+	go gol.Run(params, events, keyPresses) //key presses & events are shared between ln55 and ln57's goroutines
 	if !(*noVis) {
 		sdl.Run(params, events, keyPresses)
 	} else {

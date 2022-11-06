@@ -43,7 +43,7 @@ func (io *ioState) writePgmImage() {
 	_ = os.Mkdir("out", os.ModePerm)
 
 	// Request a filename from the distributor.
-	filename := <-io.channels.filename
+	filename := <-io.channels.filename //having called writePgmImage, we give it a file name
 
 	file, ioError := os.Create("out/" + filename + ".pgm")
 	util.Check(ioError)
@@ -65,7 +65,7 @@ func (io *ioState) writePgmImage() {
 
 	for y := 0; y < io.params.ImageHeight; y++ {
 		for x := 0; x < io.params.ImageWidth; x++ {
-			val := <-io.channels.output
+			val := <-io.channels.output //send write the image byte-by-byte
 			//if val != 0 {
 			//	fmt.Println(x, y)
 			//}
@@ -119,7 +119,7 @@ func (io *ioState) readPgmImage() {
 	image := []byte(fields[4])
 
 	for _, b := range image {
-		io.channels.input <- b
+		io.channels.input <- b //wired up to the distributor byte by byte
 	}
 
 	fmt.Println("File", filename, "input done!")
@@ -136,13 +136,13 @@ func startIo(p Params, c ioChannels) {
 		select {
 		// Block and wait for requests from the distributor
 		case command := <-io.channels.command:
-			switch command {
-			case ioInput:
+			switch command { //three commands can be sent to the io
+			case ioInput: //loads image
 				io.readPgmImage()
-			case ioOutput:
+			case ioOutput: //write image
 				io.writePgmImage()
-			case ioCheckIdle:
-				io.channels.idle <- true
+			case ioCheckIdle: //checks if io.go is idle, this defends against exiting if we are still reading or still writing
+				io.channels.idle <- true //we can safely close the program
 			}
 		}
 	}

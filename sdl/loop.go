@@ -33,7 +33,7 @@ sdlLoop:
 				w.Destroy()
 				break sdlLoop
 			}
-			switch e := event.(type) {
+			switch e := event.(type) { //sees underlying type and acts on that
 			case gol.CellFlipped:
 				w.FlipPixel(e.Cell.X, e.Cell.Y)
 			case gol.TurnComplete:
