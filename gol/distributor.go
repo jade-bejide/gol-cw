@@ -105,14 +105,13 @@ func genWorldBlock(height int, width int) [][]byte {
 }
 
 //completes one turn of gol
-func calculateNextState(p Params, world [][]byte, y1 int, y2 int) [][]byte {
+func calculateNextState(p Params, world [][]byte, nextWorld [][]byte, y1 int, y2 int) {
 	x := 0
 	y := 0
 
 	height := y2 - y1
 
     //saves updates version of the world after one GOL iteration
-    nextWorld := genWorldBlock(p.ImageHeight, p.ImageWidth)
 
     for i := 0; i < p.ImageWidth {
         nextRow := make([], p.ImageWidth)
@@ -130,15 +129,13 @@ func calculateNextState(p Params, world [][]byte, y1 int, y2 int) [][]byte {
 			if alive {
 				nextWorld[y][x] = 255
 			} else {
-				newWorld[y][x] = 0
+				nextWorld[y][x] = 0
 			}
 
 			j += 1
 		}
 		x += 1
 	}
-
-	return newWorld
 }
 
 func spreadWorkload(h int, threads int) []int {
