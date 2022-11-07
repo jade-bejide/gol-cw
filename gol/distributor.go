@@ -98,7 +98,7 @@ func genWorldBlock(height int, width int) [][]byte {
     worldBlock := make([][]byte, height)
 
     for i := range worldBlock {
-        world[i] = make([]byte, width)
+        worldBlock[i] = make([]byte, width)
     }
 
     return worldBlock
@@ -107,16 +107,8 @@ func genWorldBlock(height int, width int) [][]byte {
 //completes one turn of gol
 func calculateNextState(p Params, world [][]byte, nextWorld [][]byte, y1 int, y2 int) {
 	x := 0
-	y := 0
 
 	height := y2 - y1
-
-    //saves updates version of the world after one GOL iteration
-
-    for i := 0; i < p.ImageWidth {
-        nextRow := make([], p.ImageWidth)
-        nextWorld = append(nextWorld, nextRow)
-    }
 
 	for x < p.ImageWidth {
 		j := y1
@@ -139,11 +131,11 @@ func calculateNextState(p Params, world [][]byte, nextWorld [][]byte, y1 int, y2
 }
 
 func spreadWorkload(h int, threads int) []int {
-    splits := make(chan int, threads +1)
+    splits := make([]int, threads +1)
 
 
-    splitSize = h / threads
-    extraRows = h % threads
+    splitSize := h / threads
+    extraRows := h % threads
 
     index := 0
     for i := 0; i < h; i += splitSize {
@@ -151,7 +143,7 @@ func spreadWorkload(h int, threads int) []int {
 
         //if a worker needs to take on extra rows (this will be at most one row by modulo law)
         //add 1 to shuffle along accordingly
-        if extraRows > 0 and i > 0 {
+        if extraRows > 0 && i > 0 {
             splits[index] ++
             extraRows --
             i ++
@@ -219,6 +211,22 @@ func distributor(p Params, c distributorChannels) {
 	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: aliveCells}
 
 	c.events <- final //sending event down events channel
+
+    c.ioCommand <- ioOutput
+
+    outputExtra := "x" + strconv.Itoa(p.Turns)
+
+    filename += outputExtra
+
+	c.ioFilename <- filename
+
+	for y:= 0; y < p.ImageHeight; y ++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			c.ioOutput <- world[y][x]
+		}
+	}
+
+
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
