@@ -18,6 +18,16 @@ type distributorChannels struct {
 Distributed part (2)
 	Note that the shared memory solution for Median Filter should be used
 */
+
+type OrderMatrix
+
+//returns a closure of a 2d array of uint8s
+func makeImmutableMatrix(m [][]uint8) func(x, y int) uint8 {
+	return func(x, y int) uint8 {
+		return m[y][x]
+	}
+}
+
 //counts the number of alive neighbours of a given cell
 func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	liveNeighbours := 0
@@ -91,6 +101,21 @@ func saveWorld(world [][]byte) [][]byte {
 	}
 
 	return cp
+}
+
+func worker(p Params, readOnlyWorld [][]uint8, newWorld [][]uint8, y1, y2 int) {
+	//width := p.ImageWidth
+	//for y := y1; y < y2; y++ {
+	//	for x := 0; x < width; x++ {
+	//		neighbours := countLiveNeighbours(p, x, y, readOnlyWorld)
+	//		alive := updateState(isAlive(x, y, readOnlyWorld), neighbours)
+	//		if alive {
+	//			newWorld[y][x] = 255
+	//		} else {
+	//			newWorld[y][x] = 0
+	//		}
+	//	}
+	//}
 }
 
 //completes one turn of gol
