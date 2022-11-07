@@ -93,33 +93,49 @@ func saveWorld(world [][]byte) [][]byte {
 	return cp
 }
 
+//creates a 2D slice of a world of size height x width
+func genWorldBlock(height int, width int) [][]byte {
+    worldBlock := make([][]byte, height)
+
+    for i := range worldBlock {
+        world[i] = make([]byte, width)
+    }
+
+    return worldBlock
+}
+
 //completes one turn of gol
-func calculateNextState(p Params, world [][]byte) [][]byte {
+func calculateNextState(p Params, world [][]byte, nextWorld [][]byte, y1 int, y2 int) {
 	x := 0
 	y := 0
 
-	worldCpy := saveWorld(world) //enables you to save what the last tick of the world was
+	height := y2 - y1
+
+    //saves updates version of the world after one GOL iteration
+
+    for i := 0; i < p.ImageWidth {
+        nextRow := make([], p.ImageWidth)
+        nextWorld = append(nextWorld, nextRow)
+    }
 
 	for x < p.ImageWidth {
-		y = 0
-		for y < p.ImageHeight {
-			neighbours := countLiveNeighbours(p, x, y, world)
-			alive := isAlive(x, y, world)
+		j := y1
+		for y := 0; y < height; y++ {
+			neighbours := countLiveNeighbours(p, x, j, world)
+			alive := isAlive(x, j, world)
 
 			alive = updateState(alive, neighbours)
 
 			if alive {
-				worldCpy[y][x] = 255
+				nextWorld[y][x] = 255
 			} else {
-				worldCpy[y][x] = 0
+				nextWorld[y][x] = 0
 			}
 
-			y += 1
+			j += 1
 		}
 		x += 1
 	}
-
-	return worldCpy
 }
 
 func spreadWorkload(h int, threads int) []int {
@@ -129,14 +145,14 @@ func spreadWorkload(h int, threads int) []int {
     splitSize = h / threads
     extraRows = h % threads
 
-    j := 0
+    index := 0
     for i := 0; i < h; i += splitSize {
-        splits[j] = i
+        splits[index] = i
 
         //if a worker needs to take on extra rows (this will be at most one row by modulo law)
         //add 1 to shuffle along accordingly
         if extraRows > 0 and i > 0 {
-            splits[j] ++
+            splits[index] ++
             extraRows --
             i ++
         }
