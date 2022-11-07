@@ -122,6 +122,29 @@ func calculateNextState(p Params, world [][]byte) [][]byte {
 	return worldCpy
 }
 
+func spreadWorkload(h int, threads int) []int {
+    splits := make(chan int, threads +1)
+
+
+    splitSize = h / threads
+    extraRows = h % threads
+
+    j := 0
+    for i := 0; i < h; i += splitSize {
+        splits[j] = i
+
+        //if a worker needs to take on extra rows (this will be at most one row by modulo law)
+        //add 1 to shuffle along accordingly
+        if extraRows > 0 and i > 0 {
+            splits[j] ++
+            extraRows --
+            i ++
+        }
+    }
+
+    return splits
+}
+
 //traverses the world and takes the coordinates of any alive cells
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	x := 0
