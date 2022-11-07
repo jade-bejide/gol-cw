@@ -2,6 +2,7 @@ package gol
 
 import (
 	"strconv"
+	"sync"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -95,28 +96,20 @@ func saveWorld(world [][]byte) [][]byte {
 
 //creates a 2D slice of a world of size height x width
 func genWorldBlock(height int, width int) [][]byte {
-    worldBlock := make([][]byte, height)
+	worldBlock := make([][]byte, height)
 
-    for i := range worldBlock {
-        world[i] = make([]byte, width)
-    }
+	for i := range worldBlock {
+		worldBlock[i] = make([]byte, width)
+	}
 
-    return worldBlock
+	return worldBlock
 }
 
 //completes one turn of gol
 func calculateNextState(p Params, world [][]byte, nextWorld [][]byte, y1 int, y2 int) {
 	x := 0
-	y := 0
 
 	height := y2 - y1
-
-    //saves updates version of the world after one GOL iteration
-
-    for i := 0; i < p.ImageWidth {
-        nextRow := make([], p.ImageWidth)
-        nextWorld = append(nextWorld, nextRow)
-    }
 
 	for x < p.ImageWidth {
 		j := y1
@@ -139,26 +132,31 @@ func calculateNextState(p Params, world [][]byte, nextWorld [][]byte, y1 int, y2
 }
 
 func spreadWorkload(h int, threads int) []int {
-    splits := make(chan int, threads +1)
+	splits := make([]int, threads+1)
 
+	splitSize := h / threads
+	extraRows := h % threads
 
-    splitSize = h / threads
-    extraRows = h % threads
+	index := 0
+	for i := 0; i < h; i += splitSize {
+		splits[index] = i
 
-    index := 0
-    for i := 0; i < h; i += splitSize {
-        splits[index] = i
+		//if a worker needs to take on extra rows (this will be at most one row by modulo law)
+		//add 1 to shuffle along accordingly
+		if extraRows > 0 && i > 0 {
+			splits[index]++
+			extraRows--
+			i++
+		}
+	}
 
-        //if a worker needs to take on extra rows (this will be at most one row by modulo law)
-        //add 1 to shuffle along accordingly
-        if extraRows > 0 and i > 0 {
-            splits[index] ++
-            extraRows --
-            i ++
-        }
-    }
+	return splits
+}
 
-    return splits
+func worker(p Params, y1, y2 int, lastWorld, nextWorld [][]uint8, wg *sync.WaitGroup) {
+	//do the thgings
+	calculateNextState(p, lastWorld, nextWorld, y1, y2)
+	wg.Done()
 }
 
 //traverses the world and takes the coordinates of any alive cells
@@ -207,11 +205,21 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
+	var wg sync.WaitGroup
+
+	nextWorld := saveWorld(world)
+	splits := spreadWorkload(len(world), p.Threads)
+
 	turn := 0
 	// TODO: Execute all turns of the Game of Life.
 
 	for turn = 0; turn < p.Turns; turn++ {
-		world = calculateNextState(p, world)
+		for i := 0; i < p.Threads; i++ {
+			wg.Add(1)
+			go worker(p, splits[i], splits[i+1], world, nextWorld, &wg)
+		}
+		wg.Wait() //waits for all threads to be done
+		world = nextWorld
 	}
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
