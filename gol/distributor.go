@@ -148,14 +148,14 @@ func spreadWorkload(h int, threads int) []int {
     splitSize = h / threads
     extraRows = h % threads
 
-    j := 0
+    index := 0
     for i := 0; i < h; i += splitSize {
-        splits[j] = i
+        splits[index] = i
 
         //if a worker needs to take on extra rows (this will be at most one row by modulo law)
         //add 1 to shuffle along accordingly
         if extraRows > 0 and i > 0 {
-            splits[j] ++
+            splits[index] ++
             extraRows --
             i ++
         }
