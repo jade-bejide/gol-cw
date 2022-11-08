@@ -213,7 +213,7 @@ func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, poll
 
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
-	filename := strconv.Itoa(p.ImageWidth) + "x"  + strconv.Itoa(p.ImageHeight)
+	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, p.Turns)
 	c.ioCommand <- ioOutput
 	c.ioFilename <- filename
 
