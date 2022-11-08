@@ -1,6 +1,7 @@
 package gol
 
 import (
+	"fmt"
 	//"fmt"
 	"strconv"
 	"sync"
@@ -255,11 +256,13 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 //				c.events <- StateChange{CompletedTurns: turn.T, NewState: Quitting}
 //				currentWorld.mut.Lock()
 //					sendWriteCommand(p, c, turn.T, currentWorld.W)
+//				c.events <- FinalTurnComplete{CompletedTurns: turn.T, Alive: calculateAliveCells(p, currentWorld.W)}
 //				currentWorld.mut.Unlock()
 //			turn.mut.Unlock()
 //
+//
 //		}
-//  }
+// }
 //}
 
 var done chan bool
