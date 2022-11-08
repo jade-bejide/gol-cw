@@ -30,7 +30,7 @@ sdlLoop:
 		select {
 		case event, ok := <-events:
 			if !ok {
-				w.Destroy()
+				w.Destroy()github.com/veandco/go-sdl2/sdl
 				break sdlLoop
 			}
 			switch e := event.(type) { //sees underlying type and acts on that

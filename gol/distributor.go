@@ -1,7 +1,9 @@
 package gol
 
 import (
+	"fmt"
 	"strconv"
+	"sync"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -26,6 +28,19 @@ func makeImmutableMatrix(m [][]uint8) func(x, y int) uint8 {
 	}
 }
 
+var turns Turns
+var currentWorld SharedWorld
+
+type Turns struct {
+	T int
+	mut sync.Mutex
+}
+
+type SharedWorld struct {
+	W [][]uint8
+	mut sync.Mutex
+}
+
 //counts the number of alive neighbours of a given cell
 func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	liveNeighbours := 0
@@ -38,43 +53,19 @@ func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	u := y + 1
 	d := y - 1
 
-	if l < 0 {
-		l = w
-	}
-	if r > w {
-		r = 0
-	}
-	if u > h {
-		u = 0
-	}
-	if d < 0 {
-		d = h
-	}
+	if l < 0 { l = w }
+	if r > w { r = 0 }
+	if u > h { u = 0 }
+	if d < 0 { d = h }
 
-	if world[u][x] == 255 {
-		liveNeighbours += 1
-	}
-	if world[d][x] == 255 {
-		liveNeighbours += 1
-	}
-	if world[u][l] == 255 {
-		liveNeighbours += 1
-	}
-	if world[u][r] == 255 {
-		liveNeighbours += 1
-	}
-	if world[d][l] == 255 {
-		liveNeighbours += 1
-	}
-	if world[d][r] == 255 {
-		liveNeighbours += 1
-	}
-	if world[y][l] == 255 {
-		liveNeighbours += 1
-	}
-	if world[y][r] == 255 {
-		liveNeighbours += 1
-	}
+	if world[u][x] == 255 { liveNeighbours += 1 }
+	if world[d][x] == 255 { liveNeighbours += 1 }
+	if world[u][l] == 255 { liveNeighbours += 1 }
+	if world[u][r] == 255 { liveNeighbours += 1 }
+	if world[d][l] == 255 { liveNeighbours += 1 }
+	if world[d][r] == 255 { liveNeighbours += 1 }
+	if world[y][l] == 255 { liveNeighbours += 1 }
+	if world[y][r] == 255 { liveNeighbours += 1 }
 
 	return liveNeighbours
 }
@@ -118,7 +109,7 @@ type WorldBlock struct {
 }
 
 //completes one turn of gol
-func calculateNextState(p Params, world [][]byte, y1 int, y2 int) [][]byte {
+func calculateNextState(p Params, c distributorChannels,  world[][]byte, y1 int, y2 int, turn int) [][]byte {
 	x := 0
 
 	height := y2 - y1
@@ -137,6 +128,10 @@ func calculateNextState(p Params, world [][]byte, y1 int, y2 int) [][]byte {
 				nextWorld[y][x] = 255
 			} else {
 				nextWorld[y][x] = 0
+			}
+			if world[j][x] != nextWorld[y][x] {
+				cell := Cell{X: x, Y: j}
+				c.events <- CellFlipped{CompletedTurns: turn, Cell: cell}
 			}
 
 			j += 1
@@ -197,6 +192,57 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	return cells
 }
 
+func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
+	filename := strconv.Itoa(p.ImageWidth) + "x"  + strconv.Itoa(p.ImageHeight)
+	c.ioFilename <- filename
+	c.ioCommand <- ioOutput
+
+	for y := 0; y < p.ImageHeight; y++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			c.ioOutput <- currentWorld[y][x]
+		}
+	}
+}
+
+
+
+func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune) {
+	var paused bool
+	paused = false
+	for {
+		keyPress := <-keyPresses
+		switch keyPress {
+		case 'p':
+			if !paused {
+				turn.mut.Lock()
+					c.events <- StateChange{CompletedTurns: turn.T, NewState: Paused}
+					currentWorld.mut.Lock()
+						sendWriteCommand(p, c, turn.T, currentWorld.W)
+					currentWorld.mut.Unlock()
+				turn.mut.Unlock()
+				paused = true
+			} else {
+				turn.mut.Lock()
+					c.events <- StateChange{CompletedTurns: turn.T, NewState: Executing}
+				turn.mut.Unlock()
+				fmt.Println("Continuing")
+				paused = false
+			}
+
+		case 's':
+			sendWriteCommand(p, c, turn.T, world)
+		case 'q':
+			turn.mut.Lock()
+				c.events <- StateChange{CompletedTurns: turn.T, NewState: Quitting}
+				currentWorld.mut.Lock()
+					sendWriteCommand(p, c, turn.T, currentWorld.W)
+				currentWorld.mut.Unlock()
+			turn.mut.Unlock()
+
+		}
+	}
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	// TODO: Create a 2D slice to store the world.
@@ -237,13 +283,15 @@ func distributor(p Params, c distributorChannels) {
 			section := <-outCh
 			nextWorld[section.Index] = section.Data
 		}
-		world = make([][]byte, 0)
+		newWorld := make([][]byte, 0)
 
 		for _, section := range nextWorld {
 			for _, row := range section {
 				world = append(world, row)
 			}
 		}
+
+		c.events <- TurnComplete{CompletedTurns: turn}
 	}
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
@@ -252,21 +300,7 @@ func distributor(p Params, c distributorChannels) {
 
 	c.events <- final //sending event down events channel
 
-    c.ioCommand <- ioOutput
-
-    outputExtra := "x" + strconv.Itoa(p.Turns)
-
-    filename += outputExtra
-
-	c.ioFilename <- filename
-
-	for y:= 0; y < p.ImageHeight; y ++ {
-		for x := 0; x < p.ImageWidth; x++ {
-			c.ioOutput <- world[y][x]
-		}
-	}
-
-
+   	sendWriteCommand(p, c, p.Turns, world)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
