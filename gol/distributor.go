@@ -2,6 +2,8 @@ package gol
 
 import (
 	"strconv"
+	"sync"
+	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -18,6 +20,16 @@ type distributorChannels struct {
 Distributed part (2)
 	Note that the shared memory solution for Median Filter should be used
 */
+
+type Turns struct { //pass-by-ref integer
+	T   int
+	mut sync.Mutex
+}
+
+type SharedWorld struct { //pass-by-ref world
+	W   [][]uint8
+	mut sync.Mutex
+}
 
 //returns a closure of a 2d array of uint8s
 func makeImmutableMatrix(m [][]uint8) func(x, y int) uint8 {
@@ -113,7 +125,7 @@ func genWorldBlock(height int, width int) [][]byte {
 }
 
 type WorldBlock struct {
-	Data [][]byte
+	Data  [][]byte
 	Index int
 }
 
@@ -164,7 +176,7 @@ func spreadWorkload(h int, threads int) []int {
 			extraRows--
 			i++
 		}
-		index ++
+		index++
 	}
 
 	return splits
@@ -198,6 +210,20 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	return cells
 }
 
+//we only ever need write to events, and read from turns
+func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, pollRate time.Duration) {
+	ticker := time.NewTicker(pollRate)
+	for {
+		<-ticker.C
+		//turns.mut.Lock()
+		//critical section, we want to report while calculation is paused
+		world.mut.Lock()
+		events <- AliveCellsCount{turns.T, len(calculateAliveCells(p, world.W))}
+		world.mut.Unlock()
+		//turns.mut.Unlock()
+	}
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	// TODO: Create a 2D slice to store the world.
@@ -222,12 +248,20 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
-
 	splits := spreadWorkload(len(world), p.Threads)
 	turn := 0
 	outCh := make(chan WorldBlock)
 	// TODO: Execute all turns of the Game of Life.
+
+	//ticker tools
+	sharedTurns := Turns{0, sync.Mutex{}}
+	sharedWorld := SharedWorld{world, sync.Mutex{}}
+	go ticks(p, c.events, &sharedTurns, &sharedWorld, 2*time.Second)
+
+	//sharedTurns.mut.Lock()
+
 	for turn = 0; turn < p.Turns; turn++ {
+
 		for i := 0; i < p.Threads; i++ {
 			go worker(p, splits[i], splits[i+1], world, i, outCh)
 		}
@@ -238,14 +272,21 @@ func distributor(p Params, c distributorChannels) {
 			section := <-outCh
 			nextWorld[section.Index] = section.Data
 		}
-		world = make([][]byte, 0)
 
+		sharedWorld.mut.Lock()
+		world = make([][]byte, 0)
 		for _, section := range nextWorld {
 			for _, row := range section {
 				world = append(world, row)
 			}
 		}
+		sharedWorld.mut.Unlock()
+
+		c.events <- TurnComplete{turn}
+		sharedTurns.T++
+		sharedWorld.W = world
 	}
+	//sharedTurns.mut.Unlock()
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	aliveCells := calculateAliveCells(p, world)
