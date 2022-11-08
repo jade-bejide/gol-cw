@@ -18,6 +18,14 @@ type distributorChannels struct {
 Distributed part (2)
 	Note that the shared memory solution for Median Filter should be used
 */
+
+//returns a closure of a 2d array of uint8s
+func makeImmutableMatrix(m [][]uint8) func(x, y int) uint8 {
+	return func(x, y int) uint8 {
+		return m[y][x]
+	}
+}
+
 //counts the number of alive neighbours of a given cell
 func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	liveNeighbours := 0
@@ -95,20 +103,27 @@ func saveWorld(world [][]byte) [][]byte {
 
 //creates a 2D slice of a world of size height x width
 func genWorldBlock(height int, width int) [][]byte {
-    worldBlock := make([][]byte, height)
+	worldBlock := make([][]byte, height)
 
-    for i := range worldBlock {
-        worldBlock[i] = make([]byte, width)
-    }
+	for i := range worldBlock {
+		worldBlock[i] = make([]byte, width)
+	}
 
-    return worldBlock
+	return worldBlock
+}
+
+type WorldBlock struct {
+	Data [][]byte
+	Index int
 }
 
 //completes one turn of gol
-func calculateNextState(p Params, world [][]byte, nextWorld [][]byte, y1 int, y2 int) {
+func calculateNextState(p Params, world [][]byte, y1 int, y2 int) [][]byte {
 	x := 0
 
 	height := y2 - y1
+
+	nextWorld := genWorldBlock(height, p.ImageWidth)
 
 	for x < p.ImageWidth {
 		j := y1
@@ -128,29 +143,36 @@ func calculateNextState(p Params, world [][]byte, nextWorld [][]byte, y1 int, y2
 		}
 		x += 1
 	}
+
+	return nextWorld
 }
 
 func spreadWorkload(h int, threads int) []int {
     splits := make([]int, threads +1)
 
+	splitSize := h / threads
+	extraRows := h % threads
 
-    splitSize := h / threads
-    extraRows := h % threads
+	index := 0
+	for i := 0; i <= h; i += splitSize {
+		splits[index] = i
 
-    index := 0
-    for i := 0; i < h; i += splitSize {
-        splits[index] = i
+		//if a worker needs to take on extra rows (this will be at most one row by modulo law)
+		//add 1 to shuffle along accordingly
+		if extraRows > 0 && i > 0 {
+			splits[index]++
+			extraRows--
+			i++
+		}
+		index ++
+	}
+	return splits
+}
 
-        //if a worker needs to take on extra rows (this will be at most one row by modulo law)
-        //add 1 to shuffle along accordingly
-        if extraRows > 0 && i > 0 {
-            splits[index] ++
-            extraRows --
-            i ++
-        }
-    }
-
-    return splits
+func worker(p Params, y1, y2 int, lastWorld [][]uint8, workerId int, outCh chan<- WorldBlock) {
+	//do the things
+	nextWorld := calculateNextState(p, lastWorld, y1, y2)
+	outCh <- WorldBlock{Index: workerId, Data: nextWorld}
 }
 
 //traverses the world and takes the coordinates of any alive cells
@@ -199,11 +221,29 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
-	turn := 0
-	// TODO: Execute all turns of the Game of Life.
 
+	splits := spreadWorkload(len(world), p.Threads)
+	turn := 0
+	outCh := make(chan WorldBlock)
+	// TODO: Execute all turns of the Game of Life.
 	for turn = 0; turn < p.Turns; turn++ {
-		world = calculateNextState(p, world)
+		for i := 0; i < p.Threads; i++ {
+			go worker(p, splits[i], splits[i+1], world, i, outCh)
+		}
+
+		nextWorld := make([][][]byte, p.Threads)
+
+		for i := 0; i < p.Threads; i++ {
+			section := <-outCh
+			nextWorld[section.Index] = section.Data
+		}
+		world = make([][]byte, 0)
+
+		for _, section := range nextWorld {
+			for _, row := range section {
+				world = append(world, row)
+			}
+		}
 	}
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
