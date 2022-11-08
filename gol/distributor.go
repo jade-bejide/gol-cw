@@ -21,6 +21,9 @@ Distributed part (2)
 	Note that the shared memory solution for Median Filter should be used
 */
 
+//constants
+const aliveCellsPollDelay = 2 * time.Second
+
 type Turns struct { //pass-by-ref integer
 	T   int
 	mut sync.Mutex
@@ -256,7 +259,7 @@ func distributor(p Params, c distributorChannels) {
 	//ticker tools
 	sharedTurns := Turns{0, sync.Mutex{}}
 	sharedWorld := SharedWorld{world, sync.Mutex{}}
-	go ticks(p, c.events, &sharedTurns, &sharedWorld, 2*time.Second)
+	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
 
 	//sharedTurns.mut.Lock()
 
