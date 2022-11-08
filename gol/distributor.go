@@ -226,44 +226,42 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 	c.events <- ImageOutputComplete{CompletedTurns: currentTurn, Filename: filename}
 }
 
-//func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune) {
-//	var paused bool
-//	paused = false
-//	for {
-//		keyPress := <-keyPresses
-//		switch keyPress {
-//		case 'p':
-//			if !paused {
-//				turn.mut.Lock()
-//					c.events <- StateChange{CompletedTurns: turn.T, NewState: Paused}
-//					currentWorld.mut.Lock()
-//						sendWriteCommand(p, c, turn.T, currentWorld.W)
-//					currentWorld.mut.Unlock()
-//				turn.mut.Unlock()
-//				paused = true
-//			} else {
-//				turn.mut.Lock()
-//					c.events <- StateChange{CompletedTurns: turn.T, NewState: Executing}
-//				turn.mut.Unlock()
-//				fmt.Println("Continuing")
-//				paused = false
-//			}
-//
-//		case 's':
-//			sendWriteCommand(p, c, turn.T, world)
-//		case 'q':
-//			turn.mut.Lock()
-//				c.events <- StateChange{CompletedTurns: turn.T, NewState: Quitting}
-//				currentWorld.mut.Lock()
-//					sendWriteCommand(p, c, turn.T, currentWorld.W)
-//				c.events <- FinalTurnComplete{CompletedTurns: turn.T, Alive: calculateAliveCells(p, currentWorld.W)}
-//				currentWorld.mut.Unlock()
-//			turn.mut.Unlock()
-//
-//
-//		}
-// }
-//}
+func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *Turns, world *SharedWorld) {
+	var paused bool
+	paused = false
+	for {
+		keyPress := <-keyPresses
+		switch keyPress {
+		case 'p':
+			if !paused {
+				turns.mut.Lock()
+					c.events <- StateChange{CompletedTurns: turns.T, NewState: Paused}
+					world.mut.Lock()
+						sendWriteCommand(p, c, turns.T, world.W)
+					world.mut.Unlock()
+				turns.mut.Unlock()
+				paused = true
+			} else {
+				turns.mut.Lock()
+					c.events <- StateChange{CompletedTurns: turns.T, NewState: Executing}
+				turns.mut.Unlock()
+				fmt.Println("Continuing")
+				paused = false
+			}
+
+		case 's':
+			sendWriteCommand(p, c, turns.T, world.W)
+		case 'q':
+			turns.mut.Lock()
+				c.events <- StateChange{CompletedTurns: turns.T, NewState: Quitting}
+				world.mut.Lock()
+					sendWriteCommand(p, c, turns.T, world.W)
+				c.events <- FinalTurnComplete{CompletedTurns: turns.T, Alive: calculateAliveCells(p, world.W)}
+				world.mut.Unlock()
+			turns.mut.Unlock()
+		}
+}
+}
 
 var done chan bool
 
