@@ -2,8 +2,6 @@ package gol
 
 import (
 	"fmt"
-	//"fmt"
-	"strconv"
 	"sync"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -213,7 +211,7 @@ func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, poll
 
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
-	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, p.Turns)
+	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
 	c.ioCommand <- ioOutput
 	c.ioFilename <- filename
 
@@ -266,16 +264,11 @@ func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *T
 var done chan bool
 
 // distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels) {
+func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	// TODO: Create a 2D slice to store the world.
 
 	c.ioCommand <- ioInput //send the appropriate command... (jump ln155)
-	filename := ""
-	wStr := strconv.Itoa(p.ImageWidth)
-	hStr := strconv.Itoa(p.ImageHeight)
-	filename += wStr
-	filename += "x"
-	filename += hStr
+	filename := fmt.Sprintf("%vx%v", p.ImageHeight, p.ImageWidth)
 
 	c.ioFilename <- filename //...then send to distributor channel
 
@@ -299,11 +292,11 @@ func distributor(p Params, c distributorChannels) {
 	sharedWorld := SharedWorld{world, sync.Mutex{}}
 	done = make(chan bool)
 	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
+	go handleSDL(p, c, keyPresses, &sharedTurns, &sharedWorld)
 
 	//sharedTurns.mut.Lock()
 
 	for turn = 0; turn < p.Turns; turn++ {
-
 		for i := 0; i < p.Threads; i++ {
 			go worker(p, c, turn, splits[i], splits[i+1], world, i, outCh)
 		}
