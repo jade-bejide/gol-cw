@@ -148,7 +148,7 @@ func calculateNextState(p Params, world [][]byte, y1 int, y2 int) [][]byte {
 }
 
 func spreadWorkload(h int, threads int) []int {
-	splits := make([]int, threads+1)
+    splits := make([]int, threads +1)
 
 	splitSize := h / threads
 	extraRows := h % threads
@@ -166,7 +166,6 @@ func spreadWorkload(h int, threads int) []int {
 		}
 		index ++
 	}
-
 	return splits
 }
 
@@ -252,6 +251,22 @@ func distributor(p Params, c distributorChannels) {
 	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: aliveCells}
 
 	c.events <- final //sending event down events channel
+
+    c.ioCommand <- ioOutput
+
+    outputExtra := "x" + strconv.Itoa(p.Turns)
+
+    filename += outputExtra
+
+	c.ioFilename <- filename
+
+	for y:= 0; y < p.ImageHeight; y ++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			c.ioOutput <- world[y][x]
+		}
+	}
+
+
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
