@@ -24,6 +24,11 @@ Distributed part (2)
 //constants
 const aliveCellsPollDelay = 2 * time.Second
 
+//type Boolean struct {
+//	B bool
+//
+//}
+
 type Turns struct { //pass-by-ref integer
 	T   int
 	mut sync.Mutex
@@ -53,19 +58,43 @@ func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	u := y + 1
 	d := y - 1
 
-	if l < 0 { l = w }
-	if r > w { r = 0 }
-	if u > h { u = 0 }
-	if d < 0 { d = h }
+	if l < 0 {
+		l = w
+	}
+	if r > w {
+		r = 0
+	}
+	if u > h {
+		u = 0
+	}
+	if d < 0 {
+		d = h
+	}
 
-	if world[u][x] == 255 { liveNeighbours += 1 }
-	if world[d][x] == 255 { liveNeighbours += 1 }
-	if world[u][l] == 255 { liveNeighbours += 1 }
-	if world[u][r] == 255 { liveNeighbours += 1 }
-	if world[d][l] == 255 { liveNeighbours += 1 }
-	if world[d][r] == 255 { liveNeighbours += 1 }
-	if world[y][l] == 255 { liveNeighbours += 1 }
-	if world[y][r] == 255 { liveNeighbours += 1 }
+	if world[u][x] == 255 {
+		liveNeighbours += 1
+	}
+	if world[d][x] == 255 {
+		liveNeighbours += 1
+	}
+	if world[u][l] == 255 {
+		liveNeighbours += 1
+	}
+	if world[u][r] == 255 {
+		liveNeighbours += 1
+	}
+	if world[d][l] == 255 {
+		liveNeighbours += 1
+	}
+	if world[d][r] == 255 {
+		liveNeighbours += 1
+	}
+	if world[y][l] == 255 {
+		liveNeighbours += 1
+	}
+	if world[y][r] == 255 {
+		liveNeighbours += 1
+	}
 
 	return liveNeighbours
 }
@@ -109,7 +138,7 @@ type WorldBlock struct {
 }
 
 //completes one turn of gol
-func calculateNextState(p Params, c distributorChannels,  world[][]byte, y1 int, y2 int, turn int) [][]byte {
+func calculateNextState(p Params, c distributorChannels, world [][]byte, y1 int, y2 int, turn int) [][]byte {
 	x := 0
 
 	height := y2 - y1
@@ -143,7 +172,7 @@ func calculateNextState(p Params, c distributorChannels,  world[][]byte, y1 int,
 }
 
 func spreadWorkload(h int, threads int) []int {
-    splits := make([]int, threads +1)
+	splits := make([]int, threads+1)
 
 	splitSize := h / threads
 	extraRows := h % threads
@@ -192,23 +221,21 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	return cells
 }
 
-
 //we only ever need write to events, and read from turns
 func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, pollRate time.Duration) {
 	ticker := time.NewTicker(pollRate)
 	for {
 		select {
-			case <-done:
-				return
-			case <-ticker.C:
-				//critical section, we want to report while calculation is paused
-				world.mut.Lock()
-				events <- AliveCellsCount{turns.T, len(calculateAliveCells(p, world.W))}
-				world.mut.Unlock()
+		case <-done:
+			return
+		case <-ticker.C:
+			//critical section, we want to report while calculation is paused
+			world.mut.Lock()
+			events <- AliveCellsCount{turns.T, len(calculateAliveCells(p, world.W))}
+			world.mut.Unlock()
 		}
-    }
+	}
 }
-
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
@@ -224,7 +251,7 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 	c.events <- ImageOutputComplete{CompletedTurns: currentTurn, Filename: filename}
 }
 
-func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *Turns, world *SharedWorld) {
+func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *Turns, world *SharedWorld, pauseLock *sync.Mutex) {
 	var paused bool
 	paused = false
 	for {
@@ -233,15 +260,25 @@ func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *T
 		case 'p':
 			if !paused {
 				turns.mut.Lock()
-					c.events <- StateChange{CompletedTurns: turns.T, NewState: Paused}
-					world.mut.Lock()
-						sendWriteCommand(p, c, turns.T, world.W)
-					world.mut.Unlock()
+				c.events <- StateChange{CompletedTurns: turns.T, NewState: Paused}
+				world.mut.Lock()
+
+				sendWriteCommand(p, c, turns.T, world.W)
+				fmt.Println("SDLHandler is about to lock")
+				//pauseLock.Lock()
+				fmt.Println("SDLHandler has locked")
+
+				world.mut.Unlock()
 				turns.mut.Unlock()
 				paused = true
 			} else {
 				turns.mut.Lock()
-					c.events <- StateChange{CompletedTurns: turns.T, NewState: Executing}
+
+				fmt.Println("SDLHandler is about to unlock")
+				//pauseLock.Unlock()
+				fmt.Println("SDLHandler has unlocked")
+				c.events <- StateChange{CompletedTurns: turns.T, NewState: Executing}
+
 				turns.mut.Unlock()
 				fmt.Println("Continuing")
 				paused = false
@@ -251,14 +288,14 @@ func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *T
 			sendWriteCommand(p, c, turns.T, world.W)
 		case 'q':
 			turns.mut.Lock()
-				c.events <- StateChange{CompletedTurns: turns.T, NewState: Quitting}
-				world.mut.Lock()
-					sendWriteCommand(p, c, turns.T, world.W)
-				c.events <- FinalTurnComplete{CompletedTurns: turns.T, Alive: calculateAliveCells(p, world.W)}
-				world.mut.Unlock()
+			c.events <- StateChange{CompletedTurns: turns.T, NewState: Quitting}
+			world.mut.Lock()
+			sendWriteCommand(p, c, turns.T, world.W)
+			c.events <- FinalTurnComplete{CompletedTurns: turns.T, Alive: calculateAliveCells(p, world.W)}
+			world.mut.Unlock()
 			turns.mut.Unlock()
 		}
-}
+	}
 }
 
 var done chan bool
@@ -290,13 +327,18 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	//ticker tools
 	sharedTurns := Turns{0, sync.Mutex{}}
 	sharedWorld := SharedWorld{world, sync.Mutex{}}
+	pauseLock := sync.Mutex{}
 	done = make(chan bool)
 	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
-	go handleSDL(p, c, keyPresses, &sharedTurns, &sharedWorld)
+	go handleSDL(p, c, keyPresses, &sharedTurns, &sharedWorld, &pauseLock)
 
 	//sharedTurns.mut.Lock()
 
 	for turn = 0; turn < p.Turns; turn++ {
+		fmt.Println("main is bout to lock")
+		//pauseLock.Lock()
+		fmt.Println("main has locked!")
+
 		for i := 0; i < p.Threads; i++ {
 			go worker(p, c, turn, splits[i], splits[i+1], world, i, outCh)
 		}
@@ -321,6 +363,9 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 		sharedTurns.T++
 		sharedWorld.W = world
 
+		fmt.Println("main is bout to unlock")
+		//pauseLock.Unlock()
+		fmt.Println("main has unlocked!")
 	}
 	//sharedTurns.mut.Unlock()
 	// TODO: Report the final state using FinalTurnCompleteEvent.
@@ -329,7 +374,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: aliveCells}
 
 	c.events <- final //sending event down events channel
-   	sendWriteCommand(p, c, p.Turns, world)
+	sendWriteCommand(p, c, p.Turns, world)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
