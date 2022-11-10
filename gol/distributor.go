@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type distributorChannels struct {
@@ -20,6 +19,212 @@ type distributorChannels struct {
 Distributed part (2)
 	Note that the shared memory solution for Median Filter should be used
 */
+
+// i believe the following commented merge had all been deleted in jade's branch, which is fine, but just incase i was wrong its still here, just commented
+
+// <<<<<<< feature-server //my incoming branch 
+// //constants
+// const aliveCellsPollDelay = 2 * time.Second
+
+// //type Boolean struct {
+// //	B bool
+// //
+// //}
+
+// type Turns struct { //pass-by-ref integer
+// 	T   int
+// 	mut sync.Mutex
+// }
+
+// type SharedWorld struct { //pass-by-ref world
+// 	W   [][]uint8
+// 	mut sync.Mutex
+// }
+
+// //returns a closure of a 2d array of uint8s
+// func makeImmutableMatrix(m [][]uint8) func(x, y int) uint8 {
+// 	return func(x, y int) uint8 {
+// 		return m[y][x]
+// 	}
+// }
+
+// //counts the number of alive neighbours of a given cell
+// func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
+// 	liveNeighbours := 0
+
+// 	w := p.ImageWidth - 1
+// 	h := p.ImageHeight - 1
+
+// 	l := x - 1
+// 	r := x + 1
+// 	u := y + 1
+// 	d := y - 1
+
+// 	if l < 0 {
+// 		l = w
+// 	}
+// 	if r > w {
+// 		r = 0
+// 	}
+// 	if u > h {
+// 		u = 0
+// 	}
+// 	if d < 0 {
+// 		d = h
+// 	}
+
+// 	if world[u][x] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[d][x] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[u][l] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[u][r] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[d][l] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[d][r] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[y][l] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[y][r] == 255 { liveNeighbours += 1 }
+
+// 	return liveNeighbours
+// }
+
+// //updates the state of a world
+// func updateState(isAlive bool, neighbours int) bool {
+// 	return isAlive && neighbours > 1 && neighbours < 4 || !isAlive && neighbours == 3
+// }
+
+// //checks if a cell is alive
+// func isAlive(x int, y int, world [][]byte) bool {
+// 	return world[y][x] != 0
+// }
+
+// //makes a deep copy of a previous world state
+// func saveWorld(world [][]byte) [][]byte {
+// 	cp := make([][]byte, len(world))
+
+// 	for i := range world {
+// 		cp[i] = make([]byte, len(world[i]))
+// 		copy(cp[i], world[i])
+// 	}
+
+// 	return cp
+// }
+
+// //creates a 2D slice of a world of size height x width
+// func genWorldBlock(height int, width int) [][]byte {
+// 	worldBlock := make([][]byte, height)
+
+// 	for i := range worldBlock {
+// 		worldBlock[i] = make([]byte, width)
+// 	}
+
+// 	return worldBlock
+// }
+
+// type WorldBlock struct {
+// 	Data  [][]byte
+// 	Index int
+// }
+
+// ////completes one turn of gol
+// //func calculateNextState(p Params, c distributorChannels, world [][]byte, y1 int, y2 int, turn int) [][]byte {
+// //	x := 0
+// //
+// //	height := y2 - y1
+// //
+// //	nextWorld := genWorldBlock(height, p.ImageWidth)
+// //
+// //	for x < p.ImageWidth {
+// //		j := y1
+// //		for y := 0; y < height; y++ {
+// //			neighbours := countLiveNeighbours(p, x, j, world)
+// //			alive := isAlive(x, j, world)
+// //
+// //			alive = updateState(alive, neighbours)
+// //
+// //			if alive {
+// //				nextWorld[y][x] = 255
+// //			} else {
+// //				nextWorld[y][x] = 0
+// //			}
+// //			if world[j][x] != nextWorld[y][x] {
+// //				cell := util.Cell{X: x, Y: j}
+// //				c.events <- CellFlipped{CompletedTurns: turn, Cell: cell}
+// //			}
+// //
+// //			j += 1
+// //		}
+// //		x += 1
+// //	}
+// //
+// //	return nextWorld
+// //}
+
+// func spreadWorkload(h int, threads int) []int {
+// 	splits := make([]int, threads+1)
+
+// 	splitSize := h / threads
+// 	extraRows := h % threads
+
+// 	index := 0
+// 	for i := 0; i <= h; i += splitSize {
+// 		splits[index] = i
+
+// 		//if a worker needs to take on extra rows (this will be at most one row by modulo law)
+// 		//add 1 to shuffle along accordingly
+// 		if extraRows > 0 && i > 0 {
+// 			splits[index]++
+// 			extraRows--
+// 			i++
+// 		}
+// 		index++
+// 	}
+// 	return splits
+// }
+
+// func worker(p Params, c distributorChannels, turn int, y1 int, y2 int, lastWorld [][]uint8, workerId int, outCh chan<- WorldBlock) {
+// 	//do the things
+// 	nextWorld := calculateNextState(p, c, lastWorld, y1, y2, turn)
+// 	outCh <- WorldBlock{Index: workerId, Data: nextWorld}
+// }
+
+// //traverses the world and takes the coordinates of any alive cells
+// //func calculateAliveCells(p Params, world [][]byte) []util.Cell {
+// //	x := 0
+// //	y := 0
+// //
+// //	var cells []util.Cell
+// //
+// //	for x < p.ImageWidth {
+// //		y = 0
+// //		for y < p.ImageHeight {
+// //			if isAlive(x, y, world) {
+// //				c := util.Cell{x, y}
+// //				cells = append(cells, c)
+// //			}
+// //			y += 1
+// //		}
+// //		x += 1
+// //	}
+// //
+// //	return cells
+// //}
+
+// =======
+// >>>>>>> dev-distributed //jade's previously commited changes
+
+
 
 //we only ever need write to events, and read from turns
 // func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, pollRate time.Duration) {
