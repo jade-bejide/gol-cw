@@ -11,8 +11,59 @@ import (
 	"sync"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
-	_ "uk.ac.bris.cs/gameoflife/util"
 )
+
+// helpers
+
+func updateState(isAlive bool, neighbours int) bool {
+	return isAlive && neighbours > 1 && neighbours < 4 || !isAlive && neighbours == 3
+}
+
+func isAlive(x int, y int, world [][]byte) bool {
+	return world[y][x] != 0
+}
+
+//creates a 2D slice of a world of size height x width
+func genWorldBlock(height int, width int) [][]byte {
+	worldBlock := make([][]byte, height)
+
+	for i := range worldBlock {
+		worldBlock[i] = make([]byte, width)
+	}
+
+	return worldBlock
+}
+
+
+// logic engine
+
+func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
+		liveNeighbours := 0
+
+		w := p.ImageWidth - 1
+		h := p.ImageHeight - 1
+
+		l := x - 1
+		r := x + 1
+		u := y + 1
+		d := y - 1
+
+		if l < 0 {l = w}
+		if r > w {r = 0}
+		if u > h {u = 0}
+		if d < 0 {d = h}
+
+		if isAlive(u, x, world) { liveNeighbours += 1}
+		if isAlive(d, x, world) { liveNeighbours += 1}
+		if isAlive(u, l, world) { liveNeighbours += 1}
+		if isAlive(u, r, world) { liveNeighbours += 1}
+		if isAlive(d, l, world) { liveNeighbours += 1}
+		if isAlive(d, r, world) { liveNeighbours += 1}
+		if isAlive(y, l, world) { liveNeighbours += 1}
+		if isAlive(y, r, world) { liveNeighbours += 1}
+
+		return liveNeighbours
+	}
 
 func calculateNextState(p Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) [][]byte {
 	x := 0

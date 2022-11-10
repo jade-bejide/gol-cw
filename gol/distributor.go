@@ -2,8 +2,10 @@ package gol
 
 import (
 	"fmt"
-	"sync"
-	"time"
+	"net/rpc"
+	_ "sync"
+	_ "time"
+	"uk.ac.bris.cs/gameoflife/gol/stubs"
 )
 
 type distributorChannels struct {
@@ -318,14 +320,20 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 		}
 	}
 
+	//adding rpc "server" to make call for work to ()
+	address := "127.0.0.1:8030"
+	server, err := rpc.Dial("tcp", address)
+	if(err != nil) { panic(err) } //rudimentary error handling
+	server.Close()
 
-    req := stubs.Request{World: world, Turns: turns}
+
+    req := stubs.Request{World: world, Params: p}
     res := new(stubs.Response)
-    client.Call(stubs.Method, req, res)
+    server.Call("Gol.TakeTurns", req, res)
 
     world = res.World
     alive := res.Alive
-    finalTurns := res.Turns
+    // finalTurns := res.Turns       this property was unused, just need to avoid errors we shall add it back later
 
 //     assert p.Turns == finalTurns
 // 	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
@@ -342,7 +350,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 
-	c.events <- StateChange{turn, Quitting}
+	c.events <- StateChange{p.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
 // 	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)

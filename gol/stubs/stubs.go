@@ -15,7 +15,7 @@ type Response struct {
 }
 
 type Request struct {
-	World [][]uint8
+	World  [][]uint8
 	Params gol.Params
 }
 
