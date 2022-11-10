@@ -20,219 +20,227 @@ Distributed part (2)
 	Note that the shared memory solution for Median Filter should be used
 */
 
-//constants
-const aliveCellsPollDelay = 2 * time.Second
+// i believe the following commented merge had all been deleted in jade's branch, which is fine, but just incase i was wrong its still here, just commented
 
-//type Boolean struct {
-//	B bool
-//
-//}
+// <<<<<<< feature-server //my incoming branch 
+// //constants
+// const aliveCellsPollDelay = 2 * time.Second
 
-type Turns struct { //pass-by-ref integer
-	T   int
-	mut sync.Mutex
-}
+// //type Boolean struct {
+// //	B bool
+// //
+// //}
 
-type SharedWorld struct { //pass-by-ref world
-	W   [][]uint8
-	mut sync.Mutex
-}
+// type Turns struct { //pass-by-ref integer
+// 	T   int
+// 	mut sync.Mutex
+// }
 
-//returns a closure of a 2d array of uint8s
-func makeImmutableMatrix(m [][]uint8) func(x, y int) uint8 {
-	return func(x, y int) uint8 {
-		return m[y][x]
-	}
-}
+// type SharedWorld struct { //pass-by-ref world
+// 	W   [][]uint8
+// 	mut sync.Mutex
+// }
 
-//counts the number of alive neighbours of a given cell
-func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
-	liveNeighbours := 0
+// //returns a closure of a 2d array of uint8s
+// func makeImmutableMatrix(m [][]uint8) func(x, y int) uint8 {
+// 	return func(x, y int) uint8 {
+// 		return m[y][x]
+// 	}
+// }
 
-	w := p.ImageWidth - 1
-	h := p.ImageHeight - 1
+// //counts the number of alive neighbours of a given cell
+// func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
+// 	liveNeighbours := 0
 
-	l := x - 1
-	r := x + 1
-	u := y + 1
-	d := y - 1
+// 	w := p.ImageWidth - 1
+// 	h := p.ImageHeight - 1
 
-	if l < 0 {
-		l = w
-	}
-	if r > w {
-		r = 0
-	}
-	if u > h {
-		u = 0
-	}
-	if d < 0 {
-		d = h
-	}
+// 	l := x - 1
+// 	r := x + 1
+// 	u := y + 1
+// 	d := y - 1
 
-	if world[u][x] == 255 {
-		liveNeighbours += 1
-	}
-	if world[d][x] == 255 {
-		liveNeighbours += 1
-	}
-	if world[u][l] == 255 {
-		liveNeighbours += 1
-	}
-	if world[u][r] == 255 {
-		liveNeighbours += 1
-	}
-	if world[d][l] == 255 {
-		liveNeighbours += 1
-	}
-	if world[d][r] == 255 {
-		liveNeighbours += 1
-	}
-	if world[y][l] == 255 {
-		liveNeighbours += 1
-	}
-	if world[y][r] == 255 { liveNeighbours += 1 }
+// 	if l < 0 {
+// 		l = w
+// 	}
+// 	if r > w {
+// 		r = 0
+// 	}
+// 	if u > h {
+// 		u = 0
+// 	}
+// 	if d < 0 {
+// 		d = h
+// 	}
 
-	return liveNeighbours
-}
+// 	if world[u][x] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[d][x] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[u][l] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[u][r] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[d][l] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[d][r] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[y][l] == 255 {
+// 		liveNeighbours += 1
+// 	}
+// 	if world[y][r] == 255 { liveNeighbours += 1 }
 
-//updates the state of a world
-func updateState(isAlive bool, neighbours int) bool {
-	return isAlive && neighbours > 1 && neighbours < 4 || !isAlive && neighbours == 3
-}
+// 	return liveNeighbours
+// }
 
-//checks if a cell is alive
-func isAlive(x int, y int, world [][]byte) bool {
-	return world[y][x] != 0
-}
+// //updates the state of a world
+// func updateState(isAlive bool, neighbours int) bool {
+// 	return isAlive && neighbours > 1 && neighbours < 4 || !isAlive && neighbours == 3
+// }
 
-//makes a deep copy of a previous world state
-func saveWorld(world [][]byte) [][]byte {
-	cp := make([][]byte, len(world))
+// //checks if a cell is alive
+// func isAlive(x int, y int, world [][]byte) bool {
+// 	return world[y][x] != 0
+// }
 
-	for i := range world {
-		cp[i] = make([]byte, len(world[i]))
-		copy(cp[i], world[i])
-	}
+// //makes a deep copy of a previous world state
+// func saveWorld(world [][]byte) [][]byte {
+// 	cp := make([][]byte, len(world))
 
-	return cp
-}
+// 	for i := range world {
+// 		cp[i] = make([]byte, len(world[i]))
+// 		copy(cp[i], world[i])
+// 	}
 
-//creates a 2D slice of a world of size height x width
-func genWorldBlock(height int, width int) [][]byte {
-	worldBlock := make([][]byte, height)
+// 	return cp
+// }
 
-	for i := range worldBlock {
-		worldBlock[i] = make([]byte, width)
-	}
+// //creates a 2D slice of a world of size height x width
+// func genWorldBlock(height int, width int) [][]byte {
+// 	worldBlock := make([][]byte, height)
 
-	return worldBlock
-}
+// 	for i := range worldBlock {
+// 		worldBlock[i] = make([]byte, width)
+// 	}
 
-type WorldBlock struct {
-	Data  [][]byte
-	Index int
-}
+// 	return worldBlock
+// }
 
-////completes one turn of gol
-//func calculateNextState(p Params, c distributorChannels, world [][]byte, y1 int, y2 int, turn int) [][]byte {
-//	x := 0
-//
-//	height := y2 - y1
-//
-//	nextWorld := genWorldBlock(height, p.ImageWidth)
-//
-//	for x < p.ImageWidth {
-//		j := y1
-//		for y := 0; y < height; y++ {
-//			neighbours := countLiveNeighbours(p, x, j, world)
-//			alive := isAlive(x, j, world)
-//
-//			alive = updateState(alive, neighbours)
-//
-//			if alive {
-//				nextWorld[y][x] = 255
-//			} else {
-//				nextWorld[y][x] = 0
-//			}
-//			if world[j][x] != nextWorld[y][x] {
-//				cell := util.Cell{X: x, Y: j}
-//				c.events <- CellFlipped{CompletedTurns: turn, Cell: cell}
-//			}
-//
-//			j += 1
-//		}
-//		x += 1
-//	}
-//
-//	return nextWorld
-//}
+// type WorldBlock struct {
+// 	Data  [][]byte
+// 	Index int
+// }
 
-func spreadWorkload(h int, threads int) []int {
-	splits := make([]int, threads+1)
+// ////completes one turn of gol
+// //func calculateNextState(p Params, c distributorChannels, world [][]byte, y1 int, y2 int, turn int) [][]byte {
+// //	x := 0
+// //
+// //	height := y2 - y1
+// //
+// //	nextWorld := genWorldBlock(height, p.ImageWidth)
+// //
+// //	for x < p.ImageWidth {
+// //		j := y1
+// //		for y := 0; y < height; y++ {
+// //			neighbours := countLiveNeighbours(p, x, j, world)
+// //			alive := isAlive(x, j, world)
+// //
+// //			alive = updateState(alive, neighbours)
+// //
+// //			if alive {
+// //				nextWorld[y][x] = 255
+// //			} else {
+// //				nextWorld[y][x] = 0
+// //			}
+// //			if world[j][x] != nextWorld[y][x] {
+// //				cell := util.Cell{X: x, Y: j}
+// //				c.events <- CellFlipped{CompletedTurns: turn, Cell: cell}
+// //			}
+// //
+// //			j += 1
+// //		}
+// //		x += 1
+// //	}
+// //
+// //	return nextWorld
+// //}
 
-	splitSize := h / threads
-	extraRows := h % threads
+// func spreadWorkload(h int, threads int) []int {
+// 	splits := make([]int, threads+1)
 
-	index := 0
-	for i := 0; i <= h; i += splitSize {
-		splits[index] = i
+// 	splitSize := h / threads
+// 	extraRows := h % threads
 
-		//if a worker needs to take on extra rows (this will be at most one row by modulo law)
-		//add 1 to shuffle along accordingly
-		if extraRows > 0 && i > 0 {
-			splits[index]++
-			extraRows--
-			i++
-		}
-		index++
-	}
-	return splits
-}
+// 	index := 0
+// 	for i := 0; i <= h; i += splitSize {
+// 		splits[index] = i
 
-func worker(p Params, c distributorChannels, turn int, y1 int, y2 int, lastWorld [][]uint8, workerId int, outCh chan<- WorldBlock) {
-	//do the things
-	nextWorld := calculateNextState(p, c, lastWorld, y1, y2, turn)
-	outCh <- WorldBlock{Index: workerId, Data: nextWorld}
-}
+// 		//if a worker needs to take on extra rows (this will be at most one row by modulo law)
+// 		//add 1 to shuffle along accordingly
+// 		if extraRows > 0 && i > 0 {
+// 			splits[index]++
+// 			extraRows--
+// 			i++
+// 		}
+// 		index++
+// 	}
+// 	return splits
+// }
 
-//traverses the world and takes the coordinates of any alive cells
-//func calculateAliveCells(p Params, world [][]byte) []util.Cell {
-//	x := 0
-//	y := 0
-//
-//	var cells []util.Cell
-//
-//	for x < p.ImageWidth {
-//		y = 0
-//		for y < p.ImageHeight {
-//			if isAlive(x, y, world) {
-//				c := util.Cell{x, y}
-//				cells = append(cells, c)
-//			}
-//			y += 1
-//		}
-//		x += 1
-//	}
-//
-//	return cells
-//}
+// func worker(p Params, c distributorChannels, turn int, y1 int, y2 int, lastWorld [][]uint8, workerId int, outCh chan<- WorldBlock) {
+// 	//do the things
+// 	nextWorld := calculateNextState(p, c, lastWorld, y1, y2, turn)
+// 	outCh <- WorldBlock{Index: workerId, Data: nextWorld}
+// }
+
+// //traverses the world and takes the coordinates of any alive cells
+// //func calculateAliveCells(p Params, world [][]byte) []util.Cell {
+// //	x := 0
+// //	y := 0
+// //
+// //	var cells []util.Cell
+// //
+// //	for x < p.ImageWidth {
+// //		y = 0
+// //		for y < p.ImageHeight {
+// //			if isAlive(x, y, world) {
+// //				c := util.Cell{x, y}
+// //				cells = append(cells, c)
+// //			}
+// //			y += 1
+// //		}
+// //		x += 1
+// //	}
+// //
+// //	return cells
+// //}
+
+// =======
+// >>>>>>> dev-distributed //jade's previously commited changes
+
+
 
 //we only ever need write to events, and read from turns
-func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, pollRate time.Duration) {
-	ticker := time.NewTicker(pollRate)
-	for {
-		select {
-		case <-done:
-			return
-		case <-ticker.C:
-			//critical section, we want to report while calculation is paused
-			world.mut.Lock()
-			events <- AliveCellsCount{turns.T, len(calculateAliveCells(p, world.W))}
-			world.mut.Unlock()
-		}
-	}
-}
+// func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, pollRate time.Duration) {
+// 	ticker := time.NewTicker(pollRate)
+// 	for {
+// 		select {
+// 		case <-done:
+// 			return
+// 		case <-ticker.C:
+// 			//critical section, we want to report while calculation is paused
+// 			world.mut.Lock()
+// 			events <- AliveCellsCount{turns.T, len(calculateAliveCells(p, world.W))}
+// 			world.mut.Unlock()
+// 		}
+// 	}
+// }
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
@@ -248,49 +256,48 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 	c.events <- ImageOutputComplete{CompletedTurns: currentTurn, Filename: filename}
 }
 
-func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *Turns, world *SharedWorld, pauseLock *sync.Mutex) {
-	paused := false
-	for {
-		keyPress := <-keyPresses
-		switch keyPress {
-		case 'p':
-			fmt.Println("P")
-			if !paused {
-				turns.mut.Lock()
-				c.events <- StateChange{CompletedTurns: turns.T, NewState: Paused}
-				turns.mut.Unlock()
-				world.mut.Lock()
+// func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *Turns, world *SharedWorld, pauseLock *sync.Mutex) {
+// 	paused := false
+// 	for {
+// 		keyPress := <-keyPresses
+// 		switch keyPress {
+// 		case 'p':
+// 			fmt.Println("P")
+// 			if !paused {
+// 				turns.mut.Lock()
+// 				c.events <- StateChange{CompletedTurns: turns.T, NewState: Paused}
+// 				turns.mut.Unlock()
+// 				world.mut.Lock()
+//
+// 				sendWriteCommand(p, c, turns.T, world.W)
+//
+// 				paused = true
+// 			} else {
+// 				turns.mut.Lock()
+// 				c.events <- StateChange{CompletedTurns: turns.T, NewState: Executing}
+// 				turns.mut.Unlock()
+//
+// 				world.mut.Unlock()
+//
+// 				fmt.Println("Continuing")
+// 				paused = false
+// 			}
+// 		case 's':
+// 			sendWriteCommand(p, c, turns.T, world.W)
+// 		case 'q':
+// 			turns.mut.Lock()
+// 			c.events <- StateChange{CompletedTurns: turns.T, NewState: Quitting}
+// 			world.mut.Lock()
+// 			sendWriteCommand(p, c, turns.T, world.W)
+// 			c.events <- FinalTurnComplete{CompletedTurns: turns.T, Alive: calculateAliveCells(p, world.W)}
+// 			world.mut.Unlock()
+// 			turns.mut.Unlock()
+// 		default:
+//
+// 		}
+// 	}
+// }
 
-				sendWriteCommand(p, c, turns.T, world.W)
-
-				paused = true
-			} else {
-				turns.mut.Lock()
-				c.events <- StateChange{CompletedTurns: turns.T, NewState: Executing}
-				turns.mut.Unlock()
-
-				world.mut.Unlock()
-
-				fmt.Println("Continuing")
-				paused = false
-			}
-		case 's':
-			sendWriteCommand(p, c, turns.T, world.W)
-		case 'q':
-			turns.mut.Lock()
-			c.events <- StateChange{CompletedTurns: turns.T, NewState: Quitting}
-			world.mut.Lock()
-			sendWriteCommand(p, c, turns.T, world.W)
-			c.events <- FinalTurnComplete{CompletedTurns: turns.T, Alive: calculateAliveCells(p, world.W)}
-			world.mut.Unlock()
-			turns.mut.Unlock()
-		default:
-
-		}
-	}
-}
-
-var done chan bool
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
@@ -311,54 +318,22 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 		}
 	}
 
-	splits := spreadWorkload(len(world), p.Threads)
-	turn := 0
-	outCh := make(chan WorldBlock)
-	// TODO: Execute all turns of the Game of Life.
 
-	//ticker tools
-	sharedTurns := Turns{0, sync.Mutex{}}
-	sharedWorld := SharedWorld{world, sync.Mutex{}}
-	pauseLock := sync.Mutex{}
-	done = make(chan bool)
-	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
-	go handleSDL(p, c, keyPresses, &sharedTurns, &sharedWorld, &pauseLock)
+    req := stubs.Request{World: world, Turns: turns}
+    res := new(stubs.Response)
+    client.Call(stubs.Method, req, res)
 
-	//sharedTurns.mut.Lock()
+    world = res.World
+    alive := res.Alive
+    finalTurns := res.Turns
 
-	for turn = 0; turn < p.Turns; turn++ {
-		//pauseLock.Lock()
+//     assert p.Turns == finalTurns
+// 	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
+// 	go handleSDL(p, c, keyPresses, &sharedTurns, &sharedWorld, &pauseLock)
 
-		for i := 0; i < p.Threads; i++ {
-			go worker(p, c, turn, splits[i], splits[i+1], world, i, outCh)
-		}
-
-		nextWorld := make([][][]byte, p.Threads)
-
-		for i := 0; i < p.Threads; i++ {
-			section := <-outCh
-			nextWorld[section.Index] = section.Data
-		}
-
-		sharedWorld.mut.Lock()
-		world = make([][]byte, 0)
-		for _, section := range nextWorld {
-			for _, row := range section {
-				world = append(world, row)
-			}
-		}
-		sharedWorld.mut.Unlock()
-
-		c.events <- TurnComplete{turn}
-		sharedTurns.T++
-		sharedWorld.W = world
-		//pauseLock.Unlock()
-	}
-	//sharedTurns.mut.Unlock()
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
-	aliveCells := calculateAliveCells(p, world)
-	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: aliveCells}
+	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: alive}
 
 	c.events <- final //sending event down events channel
 	sendWriteCommand(p, c, p.Turns, world)
@@ -368,7 +343,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	<-c.ioIdle
 
 	c.events <- StateChange{turn, Quitting}
-	done <- true
+// 	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }
