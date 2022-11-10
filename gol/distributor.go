@@ -138,7 +138,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	<-c.ioIdle
 
 	c.events <- StateChange{turn, Quitting}
-	done <- true
+// 	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }
