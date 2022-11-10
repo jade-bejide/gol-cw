@@ -252,38 +252,31 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 }
 
 func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *Turns, world *SharedWorld, pauseLock *sync.Mutex) {
-	var paused bool
-	paused = false
+	paused := false
 	for {
 		keyPress := <-keyPresses
 		switch keyPress {
 		case 'p':
+			fmt.Println("P")
 			if !paused {
 				turns.mut.Lock()
 				c.events <- StateChange{CompletedTurns: turns.T, NewState: Paused}
+				turns.mut.Unlock()
 				world.mut.Lock()
 
 				sendWriteCommand(p, c, turns.T, world.W)
-				fmt.Println("SDLHandler is about to lock")
-				//pauseLock.Lock()
-				fmt.Println("SDLHandler has locked")
 
-				world.mut.Unlock()
-				turns.mut.Unlock()
 				paused = true
 			} else {
 				turns.mut.Lock()
-
-				fmt.Println("SDLHandler is about to unlock")
-				//pauseLock.Unlock()
-				fmt.Println("SDLHandler has unlocked")
 				c.events <- StateChange{CompletedTurns: turns.T, NewState: Executing}
-
 				turns.mut.Unlock()
+
+				world.mut.Unlock()
+
 				fmt.Println("Continuing")
 				paused = false
 			}
-
 		case 's':
 			sendWriteCommand(p, c, turns.T, world.W)
 		case 'q':
@@ -294,6 +287,8 @@ func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *T
 			c.events <- FinalTurnComplete{CompletedTurns: turns.T, Alive: calculateAliveCells(p, world.W)}
 			world.mut.Unlock()
 			turns.mut.Unlock()
+		default:
+
 		}
 	}
 }
@@ -335,9 +330,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	//sharedTurns.mut.Lock()
 
 	for turn = 0; turn < p.Turns; turn++ {
-		fmt.Println("main is bout to lock")
 		//pauseLock.Lock()
-		fmt.Println("main has locked!")
 
 		for i := 0; i < p.Threads; i++ {
 			go worker(p, c, turn, splits[i], splits[i+1], world, i, outCh)
@@ -362,10 +355,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 		c.events <- TurnComplete{turn}
 		sharedTurns.T++
 		sharedWorld.W = world
-
-		fmt.Println("main is bout to unlock")
 		//pauseLock.Unlock()
-		fmt.Println("main has unlocked!")
 	}
 	//sharedTurns.mut.Unlock()
 	// TODO: Report the final state using FinalTurnCompleteEvent.
