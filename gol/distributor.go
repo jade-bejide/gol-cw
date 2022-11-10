@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type distributorChannels struct {
@@ -92,9 +91,7 @@ func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 	if world[y][l] == 255 {
 		liveNeighbours += 1
 	}
-	if world[y][r] == 255 {
-		liveNeighbours += 1
-	}
+	if world[y][r] == 255 { liveNeighbours += 1 }
 
 	return liveNeighbours
 }
@@ -137,39 +134,39 @@ type WorldBlock struct {
 	Index int
 }
 
-//completes one turn of gol
-func calculateNextState(p Params, c distributorChannels, world [][]byte, y1 int, y2 int, turn int) [][]byte {
-	x := 0
-
-	height := y2 - y1
-
-	nextWorld := genWorldBlock(height, p.ImageWidth)
-
-	for x < p.ImageWidth {
-		j := y1
-		for y := 0; y < height; y++ {
-			neighbours := countLiveNeighbours(p, x, j, world)
-			alive := isAlive(x, j, world)
-
-			alive = updateState(alive, neighbours)
-
-			if alive {
-				nextWorld[y][x] = 255
-			} else {
-				nextWorld[y][x] = 0
-			}
-			if world[j][x] != nextWorld[y][x] {
-				cell := util.Cell{X: x, Y: j}
-				c.events <- CellFlipped{CompletedTurns: turn, Cell: cell}
-			}
-
-			j += 1
-		}
-		x += 1
-	}
-
-	return nextWorld
-}
+////completes one turn of gol
+//func calculateNextState(p Params, c distributorChannels, world [][]byte, y1 int, y2 int, turn int) [][]byte {
+//	x := 0
+//
+//	height := y2 - y1
+//
+//	nextWorld := genWorldBlock(height, p.ImageWidth)
+//
+//	for x < p.ImageWidth {
+//		j := y1
+//		for y := 0; y < height; y++ {
+//			neighbours := countLiveNeighbours(p, x, j, world)
+//			alive := isAlive(x, j, world)
+//
+//			alive = updateState(alive, neighbours)
+//
+//			if alive {
+//				nextWorld[y][x] = 255
+//			} else {
+//				nextWorld[y][x] = 0
+//			}
+//			if world[j][x] != nextWorld[y][x] {
+//				cell := util.Cell{X: x, Y: j}
+//				c.events <- CellFlipped{CompletedTurns: turn, Cell: cell}
+//			}
+//
+//			j += 1
+//		}
+//		x += 1
+//	}
+//
+//	return nextWorld
+//}
 
 func spreadWorkload(h int, threads int) []int {
 	splits := make([]int, threads+1)
@@ -200,26 +197,26 @@ func worker(p Params, c distributorChannels, turn int, y1 int, y2 int, lastWorld
 }
 
 //traverses the world and takes the coordinates of any alive cells
-func calculateAliveCells(p Params, world [][]byte) []util.Cell {
-	x := 0
-	y := 0
-
-	var cells []util.Cell
-
-	for x < p.ImageWidth {
-		y = 0
-		for y < p.ImageHeight {
-			if isAlive(x, y, world) {
-				c := util.Cell{x, y}
-				cells = append(cells, c)
-			}
-			y += 1
-		}
-		x += 1
-	}
-
-	return cells
-}
+//func calculateAliveCells(p Params, world [][]byte) []util.Cell {
+//	x := 0
+//	y := 0
+//
+//	var cells []util.Cell
+//
+//	for x < p.ImageWidth {
+//		y = 0
+//		for y < p.ImageHeight {
+//			if isAlive(x, y, world) {
+//				c := util.Cell{x, y}
+//				cells = append(cells, c)
+//			}
+//			y += 1
+//		}
+//		x += 1
+//	}
+//
+//	return cells
+//}
 
 //we only ever need write to events, and read from turns
 func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, pollRate time.Duration) {
