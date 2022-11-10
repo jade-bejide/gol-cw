@@ -43,11 +43,15 @@ func main() {
 		false,
 		"Disables the SDL window, so there is no visualisation during the tests.")
 
+    server := flag.String("server", "127.0.0.1:8030", "IP:port")
 	flag.Parse()
 
 	fmt.Println("Threads:", params.Threads)
 	fmt.Println("Width:", params.ImageWidth)
 	fmt.Println("Height:", params.ImageHeight)
+
+	client, err := rpc.Dial("tcp", *server)
+	defer client.Close()
 
 	keyPresses := make(chan rune, 10) //captured by sdl window
 	events := make(chan gol.Event, 1000)
