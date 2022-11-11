@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	_ "flag"
+	"fmt"
+
 	//"fmt"
 	_ "math/rand"
 	"net"
@@ -149,8 +151,10 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 }
 
 func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
+	fmt.Println("Alive", res.Alive)
 	g.WorldMut.Lock()
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
+
 	res.OnTurn = g.Turn
 	g.WorldMut.Unlock()
 
