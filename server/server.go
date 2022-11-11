@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	_ "flag"
+	"fmt"
+
 	//"fmt"
 	_ "math/rand"
 	"net"
@@ -140,20 +142,27 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 
 	takeTurns(g)
 
-
-
 	res.World = g.World
-	res.Turns = g.Turn
+	res.Turn = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
 	return
 }
 
-func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
+func (g *Gol) AliveHandler(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
 	g.WorldMut.Lock()
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
 	g.WorldMut.Unlock()
 
+	return
+}
+
+func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.WorldResponse) (err error){
+	g.WorldMut.Lock()
+	res.World = g.World
+	res.Turn = g.Turn
+	fmt.Println(res.World)
+	g.WorldMut.Unlock()
 
 	return
 }

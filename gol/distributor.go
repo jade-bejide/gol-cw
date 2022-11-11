@@ -300,6 +300,55 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 // 	}
 // }
 
+func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, done *bool){
+	isPaused := false
+
+	for {
+		fmt.Println("waiting for a keypress")
+		switch <-keyPresses {
+		case 's':
+			//request current state through stubs package
+			//write the pgm out
+			req := stubs.EmptyRequest{}
+			res := stubs.WorldResponse{}
+
+			done := make(chan *rpc.Call, 1)
+			client.Go(stubs.PollWorldHandler, req, res, done)
+			<-done
+			fmt.Println("Generating PGM of")
+			fmt.Println(res.World)
+
+			sendWriteCommand(p, c, res.Turn, res.World)
+
+			fmt.Println("Generated PGM")
+
+			break
+		case 'q':
+			//close controller
+			fmt.Println("Shutting down local component")
+			*done = true
+			break
+		case 'k':
+			//request closure of server through stubs package
+			fmt.Println("Shutting down remote and local components")
+			break
+		case 'p':
+			//request pausing of aws node through stubs package
+			//then print the current turn
+			//once p is pressed again resume processing through requesting from stubs
+			if(!isPaused){
+				fmt.Println("Paused")
+				isPaused = true
+			}else{
+				fmt.Println("Continuing")
+				isPaused = false
+			}
+			break
+		default:
+			break
+		}
+	}
+}
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client) {
@@ -319,9 +368,13 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 			world[y][x] = pixel
 		}
 	}
+
+	done := false
+	go handleKeyPresses(p, c, client, keyPresses, &done)
+
     req := stubs.Request{World: world, Params: stubs.Params(p)}
     res := new(stubs.Response)
-    client.Call("Gol.TakeTurns", req, res)
+    client.Call(stubs.TurnsHandler, req, res)
 
     world = res.World
 
