@@ -319,16 +319,12 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 			world[y][x] = pixel
 		}
 	}
-
-
-
-
-
     req := stubs.Request{World: world, Params: stubs.Params(p)}
     res := new(stubs.Response)
     client.Call("Gol.TakeTurns", req, res)
 
     world = res.World
+
     alive := res.Alive
     // finalTurns := res.Turns       this property was unused, just need to avoid errors we shall add it back later
 

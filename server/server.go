@@ -1,8 +1,9 @@
-package gol
+package main
 
 import (
 	"flag"
 	_ "flag"
+	//"fmt"
 	_ "math/rand"
 	"net"
 	_ "net"
@@ -37,7 +38,7 @@ func genWorldBlock(height int, width int) [][]byte {
 
 // logic engine
 
-func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
+func countLiveNeighbours(p stubs.Params, x int, y int, world [][]byte) int {
 		liveNeighbours := 0
 
 		w := p.ImageWidth - 1
@@ -53,19 +54,19 @@ func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 		if u > h {u = 0}
 		if d < 0 {d = h}
 
-		if isAlive(u, x, world) { liveNeighbours += 1}
-		if isAlive(d, x, world) { liveNeighbours += 1}
-		if isAlive(u, l, world) { liveNeighbours += 1}
-		if isAlive(u, r, world) { liveNeighbours += 1}
-		if isAlive(d, l, world) { liveNeighbours += 1}
-		if isAlive(d, r, world) { liveNeighbours += 1}
-		if isAlive(y, l, world) { liveNeighbours += 1}
-		if isAlive(y, r, world) { liveNeighbours += 1}
+		if isAlive(x, u, world) { liveNeighbours += 1}
+		if isAlive(x, d, world) { liveNeighbours += 1}
+		if isAlive(l, u, world) { liveNeighbours += 1}
+		if isAlive(r, u, world) { liveNeighbours += 1}
+		if isAlive(l, d, world) { liveNeighbours += 1}
+		if isAlive(r, d, world) { liveNeighbours += 1}
+		if isAlive(l, y, world) { liveNeighbours += 1}
+		if isAlive(r, y, world) { liveNeighbours += 1}
 
 		return liveNeighbours
 	}
 
-func calculateNextState(p Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) [][]byte {
+func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) [][]byte {
 	x := 0
 
 	height := y2 - y1
@@ -94,27 +95,22 @@ func calculateNextState(p Params, /*c distributorChannels, */world [][]byte, y1 
 		}
 		x += 1
 	}
-
+	//fmt.Println(nextWorld)
 	return nextWorld
 }
 
 func takeTurns(g *Gol){
-	turn := &(g.Turn)
-	turns := g.Params.Turns
-	world := &(g.World)
-	mut := &(g.WorldMut)
-
-	*turn = 0
-	for *turn < turns {
-		mut.Lock() //block if we're reading the current alive cells
-		*world = calculateNextState(g.Params, /*_,*/ *world, 0, g.Params.ImageHeight, *turn)
-		*turn++
-		mut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
+	g.Turn = 0
+	for g.Turn < g.Params.Turns {
+		g.WorldMut.Lock() //block if we're reading the current alive cells
+		g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
+		g.Turn++
+		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
 		//c.events <- TurnComplete{turn}
 	}
 }
 
-func calculateAliveCells(p Params, world [][]byte) []util.Cell {
+func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	var cells []util.Cell
 
 	for x := 0; x < p.ImageWidth; x++{
@@ -130,28 +126,35 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 }
 
 type Gol struct {
-	Params Params
+	Params stubs.Params
 	World [][]uint8
 	WorldMut sync.Mutex
 	Turn int
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
-	g.Params = Params(req.Params)
+	g.Params = stubs.Params(req.Params)
+
 	g.World = req.World
 	g.Turn = 0
+
 	takeTurns(g)
+
+
+
 	res.World = g.World
 	res.Turns = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
 	return
 }
 
-func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse){
+func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
 	g.WorldMut.Lock()
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
 	g.WorldMut.Unlock()
+
+
 	return
 }
 
