@@ -46,8 +46,6 @@ func main() {
     //server := flag.String("server", "127.0.0.1:8030", "IP:port")
 	flag.Parse()
 
-
-
 	fmt.Println("Threads:", params.Threads)
 	fmt.Println("Width:", params.ImageWidth)
 	fmt.Println("Height:", params.ImageHeight)

@@ -46,8 +46,8 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 		ioInput:    ioInput,
 	}
 
-	//adding rpc "server" to make call for work to ()
 	server := "127.0.0.1:8030"
+	//adding rpc "server" to make call for work to ()
 	client, err := rpc.Dial("tcp", server)
 	if(err != nil) { panic(err) } //rudimentary error handling
 	defer client.Close()
