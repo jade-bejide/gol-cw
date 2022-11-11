@@ -1,5 +1,7 @@
 package gol
 
+import "net/rpc"
+
 // Params provides the details of how to run the Game of Life and which image to load.
 type Params struct {
 	Turns       int
@@ -9,7 +11,7 @@ type Params struct {
 }
 
 // Run starts the processing of Game of Life. It should initialise channels and goroutines.
-func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
+func Run(p Params, events chan<- Event, keyPresses <-chan rune, server string) {
 	/*
 		inputs
 			p -> CL arguments
@@ -44,6 +46,11 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 		ioInput:    ioInput,
 	}
 
+	//adding rpc "server" to make call for work to ()
+	client, err := rpc.Dial("tcp", server)
+	if(err != nil) { panic(err) } //rudimentary error handling
+	defer client.Close()
 
-	distributor(p, distributorChannels, keyPresses)
+
+	distributor(p, distributorChannels, keyPresses, client)
 }

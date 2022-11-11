@@ -50,13 +50,10 @@ func main() {
 	fmt.Println("Width:", params.ImageWidth)
 	fmt.Println("Height:", params.ImageHeight)
 
-	client, err := rpc.Dial("tcp", *server)
-	defer client.Close()
-
 	keyPresses := make(chan rune, 10) //captured by sdl window
 	events := make(chan gol.Event, 1000)
 
-	go gol.Run(params, events, keyPresses) //key presses & events are shared between ln55 and ln57's goroutines
+	go gol.Run(params, events, keyPresses, *server) //key presses & events are shared between ln55 and ln57's goroutines
 	if !(*noVis) {
 		sdl.Run(params, events, keyPresses)
 	} else {

@@ -2,8 +2,10 @@ package gol
 
 import (
 	"fmt"
-	"sync"
-	"time"
+	"net/rpc"
+	_ "sync"
+	_ "time"
+	"uk.ac.bris.cs/gameoflife/gol/stubs"
 )
 
 type distributorChannels struct {
@@ -300,7 +302,7 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 
 
 // distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
+func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client) {
 	// TODO: Create a 2D slice to store the world.
 
 	c.ioCommand <- ioInput //send the appropriate command... (jump ln155)
@@ -319,13 +321,16 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	}
 
 
-    req := stubs.Request{World: world, Turns: turns}
+
+
+
+    req := stubs.Request{World: world, Params: stubs.Params(p)}
     res := new(stubs.Response)
-    client.Call(stubs.Method, req, res)
+    client.Call("Gol.TakeTurns", req, res)
 
     world = res.World
     alive := res.Alive
-    finalTurns := res.Turns
+    // finalTurns := res.Turns       this property was unused, just need to avoid errors we shall add it back later
 
 //     assert p.Turns == finalTurns
 // 	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
@@ -342,7 +347,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 
-	c.events <- StateChange{turn, Quitting}
+	c.events <- StateChange{p.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
 // 	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
