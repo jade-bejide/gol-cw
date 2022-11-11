@@ -1,12 +1,18 @@
 package stubs
 
 import (
-	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
 var TurnsHandler = "Gol.TakeTurns"
 var AliveHandler = "Gol.ReportAlive"
+
+type Params struct {
+	Turns       int
+	Threads     int
+	ImageWidth  int
+	ImageHeight int
+}
 
 type Response struct {
 	World [][]uint8 //final world
@@ -16,7 +22,7 @@ type Response struct {
 
 type Request struct {
 	World  [][]uint8
-	Params gol.Params
+	Params Params
 }
 
 type AliveRequest struct {}
