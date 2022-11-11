@@ -95,7 +95,7 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 		}
 		x += 1
 	}
-
+	fmt.Println(nextWorld)
 	return nextWorld
 }
 
