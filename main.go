@@ -43,8 +43,10 @@ func main() {
 		false,
 		"Disables the SDL window, so there is no visualisation during the tests.")
 
-    server := flag.String("server", "127.0.0.1:8030", "IP:port")
+    //server := flag.String("server", "127.0.0.1:8030", "IP:port")
 	flag.Parse()
+
+
 
 	fmt.Println("Threads:", params.Threads)
 	fmt.Println("Width:", params.ImageWidth)
@@ -53,7 +55,7 @@ func main() {
 	keyPresses := make(chan rune, 10) //captured by sdl window
 	events := make(chan gol.Event, 1000)
 
-	go gol.Run(params, events, keyPresses, *server) //key presses & events are shared between ln55 and ln57's goroutines
+	go gol.Run(params, events, keyPresses) //key presses & events are shared between ln55 and ln57's goroutines
 	if !(*noVis) {
 		sdl.Run(params, events, keyPresses)
 	} else {

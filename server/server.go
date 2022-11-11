@@ -113,6 +113,13 @@ func takeTurns(g *Gol){
 		//mut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
 		//c.events <- TurnComplete{turn}
 	}
+
+	fmt.Println("In Take Turns")
+	for _, row := range *world {
+		fmt.Println(row)
+	}
+
+	fmt.Println()
 }
 
 func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
@@ -138,15 +145,25 @@ type Gol struct {
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
-	fmt.Println("TakeTurns called remotely")
 	g.Params = stubs.Params(req.Params)
+
 	g.World = req.World
 	g.Turn = 0
+
+	fmt.Println("Before")
+	for _, row := range g.World {
+		fmt.Println(row)
+	}
+
+	fmt.Println()
+	fmt.Println(g.Params.Turns, g.Params.ImageWidth, g.Params.Threads)
 	takeTurns(g)
+
+
+
 	res.World = g.World
 	res.Turns = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
-	fmt.Println("TakeTurns returns")
 	return
 }
 
@@ -156,6 +173,8 @@ func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse) (er
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
 	g.WorldMut.Unlock()
+
+
 	return
 }
 
