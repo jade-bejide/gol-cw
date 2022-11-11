@@ -100,17 +100,12 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 }
 
 func takeTurns(g *Gol){
-	turn := &(g.Turn)
-	turns := g.Params.Turns
-	world := &(g.World)
-	//mut := &(g.WorldMut)
-
-	*turn = 0
-	for *turn < turns {
-		//mut.Lock() //block if we're reading the current alive cells
-		*world = calculateNextState(g.Params, /*_,*/ *world, 0, g.Params.ImageHeight, *turn)
-		*turn++
-		//mut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
+	g.Turn = 0
+	for g.Turn < g.Params.Turns {
+		g.WorldMut.Lock() //block if we're reading the current alive cells
+		g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
+		g.Turn++
+		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
 		//c.events <- TurnComplete{turn}
 	}
 }
