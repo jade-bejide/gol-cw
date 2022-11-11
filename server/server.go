@@ -1,8 +1,9 @@
-package gol
+package main
 
 import (
 	"flag"
 	_ "flag"
+	"fmt"
 	_ "math/rand"
 	"net"
 	_ "net"
@@ -37,7 +38,7 @@ func genWorldBlock(height int, width int) [][]byte {
 
 // logic engine
 
-func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
+func countLiveNeighbours(p stubs.Params, x int, y int, world [][]byte) int {
 		liveNeighbours := 0
 
 		w := p.ImageWidth - 1
@@ -65,7 +66,7 @@ func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 		return liveNeighbours
 	}
 
-func calculateNextState(p Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) [][]byte {
+func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) [][]byte {
 	x := 0
 
 	height := y2 - y1
@@ -102,19 +103,19 @@ func takeTurns(g *Gol){
 	turn := &(g.Turn)
 	turns := g.Params.Turns
 	world := &(g.World)
-	mut := &(g.WorldMut)
+	//mut := &(g.WorldMut)
 
 	*turn = 0
 	for *turn < turns {
-		mut.Lock() //block if we're reading the current alive cells
+		//mut.Lock() //block if we're reading the current alive cells
 		*world = calculateNextState(g.Params, /*_,*/ *world, 0, g.Params.ImageHeight, *turn)
 		*turn++
-		mut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
+		//mut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
 		//c.events <- TurnComplete{turn}
 	}
 }
 
-func calculateAliveCells(p Params, world [][]byte) []util.Cell {
+func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	var cells []util.Cell
 
 	for x := 0; x < p.ImageWidth; x++{
@@ -130,24 +131,27 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 }
 
 type Gol struct {
-	Params Params
+	Params stubs.Params
 	World [][]uint8
 	WorldMut sync.Mutex
 	Turn int
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
-	g.Params = Params(req.Params)
+	fmt.Println("TakeTurns called remotely")
+	g.Params = stubs.Params(req.Params)
 	g.World = req.World
 	g.Turn = 0
 	takeTurns(g)
 	res.World = g.World
 	res.Turns = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
+	fmt.Println("TakeTurns returns")
 	return
 }
 
-func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse){
+func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
+	fmt.Println("AliveHandler called remotely")
 	g.WorldMut.Lock()
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
