@@ -1,7 +1,6 @@
 package stubs
 
 import (
-	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -14,9 +13,16 @@ type Response struct {
 	Alive []util.Cell //alive cells to report to distributor events
 }
 
+type Params struct {
+	Turns int
+	Threads int
+	ImageHeight int
+	ImageWidth int
+}
+
 type Request struct {
 	World  [][]uint8
-	Params gol.Params
+	Params Params
 }
 
 type AliveRequest struct {}

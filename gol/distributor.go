@@ -302,7 +302,7 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 
 
 // distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
+func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client) {
 	// TODO: Create a 2D slice to store the world.
 
 	c.ioCommand <- ioInput //send the appropriate command... (jump ln155)
@@ -320,16 +320,13 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 		}
 	}
 
-	//adding rpc "server" to make call for work to ()
-	address := "127.0.0.1:8030"
-	server, err := rpc.Dial("tcp", address)
-	if(err != nil) { panic(err) } //rudimentary error handling
-	server.Close()
+
+
 
 
     req := stubs.Request{World: world, Params: p}
     res := new(stubs.Response)
-    server.Call("Gol.TakeTurns", req, res)
+    client.Call("Gol.TakeTurns", req, res)
 
     world = res.World
     alive := res.Alive
