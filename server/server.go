@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	_ "flag"
-	"fmt"
+	//"fmt"
 	_ "math/rand"
 	"net"
 	_ "net"
@@ -54,14 +54,14 @@ func countLiveNeighbours(p stubs.Params, x int, y int, world [][]byte) int {
 		if u > h {u = 0}
 		if d < 0 {d = h}
 
-		if isAlive(u, x, world) { liveNeighbours += 1}
-		if isAlive(d, x, world) { liveNeighbours += 1}
-		if isAlive(u, l, world) { liveNeighbours += 1}
-		if isAlive(u, r, world) { liveNeighbours += 1}
-		if isAlive(d, l, world) { liveNeighbours += 1}
-		if isAlive(d, r, world) { liveNeighbours += 1}
-		if isAlive(y, l, world) { liveNeighbours += 1}
-		if isAlive(y, r, world) { liveNeighbours += 1}
+		if isAlive(x, u, world) { liveNeighbours += 1}
+		if isAlive(x, d, world) { liveNeighbours += 1}
+		if isAlive(l, u, world) { liveNeighbours += 1}
+		if isAlive(r, u, world) { liveNeighbours += 1}
+		if isAlive(l, d, world) { liveNeighbours += 1}
+		if isAlive(r, d, world) { liveNeighbours += 1}
+		if isAlive(l, y, world) { liveNeighbours += 1}
+		if isAlive(r, y, world) { liveNeighbours += 1}
 
 		return liveNeighbours
 	}
@@ -95,7 +95,7 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 		}
 		x += 1
 	}
-	fmt.Println(nextWorld)
+	//fmt.Println(nextWorld)
 	return nextWorld
 }
 
@@ -108,13 +108,6 @@ func takeTurns(g *Gol){
 		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
 		//c.events <- TurnComplete{turn}
 	}
-
-	fmt.Println("In Take Turns")
-	for _, row := range *world {
-		fmt.Println(row)
-	}
-
-	fmt.Println()
 }
 
 func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
@@ -145,13 +138,6 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	g.World = req.World
 	g.Turn = 0
 
-	fmt.Println("Before")
-	for _, row := range g.World {
-		fmt.Println(row)
-	}
-
-	fmt.Println()
-	fmt.Println(g.Params.Turns, g.Params.ImageWidth, g.Params.Threads)
 	takeTurns(g)
 
 
@@ -163,7 +149,6 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 }
 
 func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
-	fmt.Println("AliveHandler called remotely")
 	g.WorldMut.Lock()
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
