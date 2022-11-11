@@ -327,7 +327,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	server.Close()
 
 
-    req := stubs.Request{World: world, Params: p}
+    req := stubs.Request{World: world, Params: stubs.Params(p)}
     res := new(stubs.Response)
     server.Call("Gol.TakeTurns", req, res)
 

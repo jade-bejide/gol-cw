@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/rpc"
 	"runtime"
 
 	"uk.ac.bris.cs/gameoflife/gol"
@@ -51,6 +52,7 @@ func main() {
 	fmt.Println("Height:", params.ImageHeight)
 
 	client, err := rpc.Dial("tcp", *server)
+	if
 	defer client.Close()
 
 	keyPresses := make(chan rune, 10) //captured by sdl window
