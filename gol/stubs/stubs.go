@@ -7,17 +7,17 @@ import (
 var TurnsHandler = "Gol.TakeTurns"
 var AliveHandler = "Gol.ReportAlive"
 
+type Params struct {
+	Turns       int
+	Threads     int
+	ImageWidth  int
+	ImageHeight int
+}
+
 type Response struct {
 	World [][]uint8 //final world
 	Turns int //to report to distributor events
 	Alive []util.Cell //alive cells to report to distributor events
-}
-
-type Params struct {
-	Turns int
-	Threads int
-	ImageHeight int
-	ImageWidth int
 }
 
 type Request struct {

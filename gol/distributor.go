@@ -324,7 +324,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 
 
-    req := stubs.Request{World: world, Params: p}
+    req := stubs.Request{World: world, Params: stubs.Params(p)}
     res := new(stubs.Response)
     client.Call("Gol.TakeTurns", req, res)
 

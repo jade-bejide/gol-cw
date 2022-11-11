@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net/rpc"
 	"runtime"
 
 	"uk.ac.bris.cs/gameoflife/gol"
@@ -50,8 +49,6 @@ func main() {
 	fmt.Println("Threads:", params.Threads)
 	fmt.Println("Width:", params.ImageWidth)
 	fmt.Println("Height:", params.ImageHeight)
-
-
 
 	keyPresses := make(chan rune, 10) //captured by sdl window
 	events := make(chan gol.Event, 1000)

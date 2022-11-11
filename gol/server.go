@@ -137,7 +137,7 @@ type Gol struct {
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
-	g.Params = req.Params
+	g.Params = Params(req.Params)
 	g.World = req.World
 	g.Turn = 0
 	takeTurns(g)
