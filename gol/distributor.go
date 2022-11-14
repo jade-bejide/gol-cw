@@ -332,6 +332,10 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 				case 'q':
 					//close controller
 					fmt.Println("Shutting down local component")
+					err := client.Call(stubs.ResetHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
+					if err != nil {
+						panic(err)
+					}
 					doneTurns <- true
 					return
 				case 'k':
