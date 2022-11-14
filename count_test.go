@@ -38,7 +38,6 @@ func TestAlive(t *testing.T) {
 	}()
 
 	i := 0
-
 	for event := range events {
 		switch e := event.(type) {
 		case gol.AliveCellsCount:

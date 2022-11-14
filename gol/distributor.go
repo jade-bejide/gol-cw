@@ -225,12 +225,12 @@ const aliveCellsPollDelay = 2 * time.Second
 // //}
 
 // =======
-// >>>>>>> dev-distributed //jade's previously commited changes
 
 
 
 //we only ever need write to events, and read from turns
 func ticks(c distributorChannels, client *rpc.Client, done <-chan bool) {
+	//newRound :=
 	ticker := time.NewTicker(aliveCellsPollDelay)
 	for {
 		select {
@@ -245,7 +245,6 @@ func ticks(c distributorChannels, client *rpc.Client, done <-chan bool) {
 			done := make(chan *rpc.Call, 1)
 			callRes := client.Go(stubs.AliveHandler, req, res, done)
 			<-callRes.Done
-
 			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: res.Alive}
 		}
 	}
@@ -331,7 +330,13 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	done := make(chan bool)
 	go ticks(c, client, done)
-    client.Call("Gol.TakeTurns", req, res)
+
+	takeTurnsCh := make(chan *rpc.Call, 1)
+    client.Go("Gol.TakeTurns", req, res, takeTurnsCh)
+	<-takeTurnsCh
+
+
+
 
     world = res.World
 
@@ -356,6 +361,15 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	<-c.ioIdle
 
 	c.events <- StateChange{p.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
+
+
+	closeReq := stubs.CloseRequest{Close: true}
+	closeRes := new(stubs.CloseResponse)
+
+	closeCh := make(chan *rpc.Call, 1)
+	client.Go(stubs.CloseHandler, closeReq, closeRes, closeCh)
+	<-closeCh
+
 	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)

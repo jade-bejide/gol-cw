@@ -4,8 +4,6 @@ import (
 	"flag"
 	_ "flag"
 	"fmt"
-
-	//"fmt"
 	_ "math/rand"
 	"net"
 	_ "net"
@@ -104,6 +102,7 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 func takeTurns(g *Gol){
 	g.Turn = 0
 	for g.Turn < g.Params.Turns {
+		fmt.Println("!!")
 	    g.TurnMut.Lock()
 		g.WorldMut.Lock() //block if we're reading the current alive cells
 		g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
@@ -112,6 +111,8 @@ func takeTurns(g *Gol){
 		g.TurnMut.Unlock()
 		//c.events <- TurnComplete{turn}
 	}
+
+	//done <- true
 }
 
 func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
@@ -138,12 +139,16 @@ type Gol struct {
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
+
+	fmt.Println("bbbaaa")
 	g.Params = stubs.Params(req.Params)
 
 	g.World = req.World
 	g.Turn = 0
 
+	//done := make(chan bool)
 	takeTurns(g)
+	//<-done
 
 
 
@@ -153,15 +158,33 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	return
 }
 
+//before a client closes, it calls the server to reset the world
+func (g *Gol) ResetWorld(req stubs.CloseRequest, res *stubs.CloseResponse) (err error) {
+	fmt.Println("Closing client")
+	if req.Close == true {
+		g.World = make([][]uint8, 0)
+		g.Turn = 0
+		res.ResponseCode = 0
+	} else { res.ResponseCode = -1 }
+
+
+	return
+}
+
+
 func (g *Gol) ReportAlive(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
 
-	g.WorldMut.Lock()
+	//g.TurnMut.Lock()
+	//g.WorldMut.Lock()
+
+
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
-	fmt.Println("Alive", res.Alive)
-	g.TurnMut.Lock()
 	res.OnTurn = g.Turn
-	g.TurnMut.Unlock()
-	g.WorldMut.Unlock()
+	fmt.Println(res.Alive, res.OnTurn)
+	//g.TurnMut.Unlock()
+	//g.WorldMut.Unlock()
+
+
 
 
 	return
