@@ -231,8 +231,10 @@ func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, poll
 		case <-ticker.C:
 			//critical section, we want to report while calculation is paused
 			world.mut.Lock()
+			turns.mut.Lock()
 			events <- AliveCellsCount{turns.T, len(calculateAliveCells(p, world.W))}
 			world.mut.Unlock()
+			turns.mut.Unlock()
 		}
 	}
 }
@@ -327,11 +329,11 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
 	go handleSDL(p, c, keyPresses, &sharedTurns, &sharedWorld, &pauseLock)
 
-	//sharedTurns.mut.Lock()
+	sharedTurns.mut.Lock()
 
 	for turn = 0; turn < p.Turns; turn++ {
 		//pauseLock.Lock()
-
+		sharedTurns.mut.Unlock()
 		for i := 0; i < p.Threads; i++ {
 			go worker(p, c, turn, splits[i], splits[i+1], world, i, outCh)
 		}
@@ -355,9 +357,11 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 		c.events <- TurnComplete{turn}
 		sharedTurns.T++
 		sharedWorld.W = world
+		sharedTurns.mut.Lock()
 		//pauseLock.Unlock()
 	}
-	//sharedTurns.mut.Unlock()
+
+	sharedTurns.mut.Unlock()
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	aliveCells := calculateAliveCells(p, world)
