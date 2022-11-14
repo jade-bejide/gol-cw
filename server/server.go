@@ -109,8 +109,8 @@ func takeTurns(g *Gol){
 		g.Turn++
 		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
 		//c.events <- TurnComplete{turn}
-		if(g.Turn % 1000 == 0) {
-			fmt.Println("im on turn %v", g.Turn)
+		if(g.Turn % 50 == 0) {
+			fmt.Println("im on turn ", g.Turn)
 		}
 	}
 }
@@ -160,12 +160,15 @@ func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err
 	return
 }
 
-func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.WorldResponse) (err error){
+func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
 	g.WorldMut.Lock()
 	res.World = g.World
 	res.Turn = g.Turn
+	res.Alive = calculateAliveCells(g.Params, g.World)
 	g.WorldMut.Unlock()
-	fmt.Println("I am responding with the world")
+	//fmt.Println("I am responding with the world on turn", res.Turn)
+	//fmt.Printf("The world looks like")
+	//fmt.Println(res.World)
 
 	return
 }
@@ -178,5 +181,6 @@ func main() {
 	listener, err := net.Listen("tcp", ":"+*portPtr)
 	if(err != nil) { panic(err) }
 	defer listener.Close()
+	fmt.Println("server listening on port "+*portPtr)
 	rpc.Accept(listener)
 }

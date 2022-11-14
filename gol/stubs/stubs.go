@@ -14,12 +14,10 @@ type Params struct {
 type EmptyRequest struct {}
 
 var TurnsHandler = "Gol.TakeTurns"
-
 type Request struct {
 	World  [][]uint8
 	Params Params
 }
-
 type Response struct {
 	World [][]uint8 //final world
 	Turn int //to report to distributor events
@@ -28,26 +26,21 @@ type Response struct {
 
 
 var AliveHandler = "Gol.ReportAlive"
-
 //EmptyRequest
-
 type AliveResponse struct {
 	Alive int
 	OnTurn int
 }
 
 var PollWorldHandler = "Gol.PollWorld"
-
 //EmptyRequest
-
-type WorldResponse struct {
-	World [][]uint8
-	Turn int
-}
-
+//Response
 
 var ShutdownHandler = "Gol.Shutdown"
-
 //EmptyRequest
-
 //Response
+//
+//var QuitHandler = "Gol.Suspend"
+//EmptyRequest
+//Response
+
