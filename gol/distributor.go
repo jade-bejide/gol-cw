@@ -280,7 +280,11 @@ func handleSDL(p Params, c distributorChannels, keyPresses <-chan rune, turns *T
 				paused = false
 			}
 		case 's':
+			turns.mut.Lock()
+			world.mut.Lock()
 			sendWriteCommand(p, c, turns.T, world.W)
+			turns.mut.Unlock()
+			world.mut.Unlock()
 		case 'q':
 			turns.mut.Lock()
 			c.events <- StateChange{CompletedTurns: turns.T, NewState: Quitting}
