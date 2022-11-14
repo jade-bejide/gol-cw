@@ -241,8 +241,11 @@ func ticks(c distributorChannels, client *rpc.Client, done <-chan bool) {
 
 			res := new(stubs.AliveResponse)
 			//func (client *Client) Go(serviceMethod string, args any, reply any, done chan *Call) *Call
-			callRes := client.Go(stubs.AliveHandler, req, res, nil)
-			fmt.Println(callRes.Error, callRes.Reply)
+
+			done := make(chan *rpc.Call, 1)
+			callRes := client.Go(stubs.AliveHandler, req, res, done)
+			<-callRes.Done
+
 			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: res.Alive}
 		}
 	}
