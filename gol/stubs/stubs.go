@@ -12,6 +12,7 @@ type Params struct {
 }
 
 type EmptyRequest struct {}
+type EmptyResponse struct{}
 
 var TurnsHandler = "Gol.TakeTurns"
 type Request struct {
@@ -36,11 +37,12 @@ var PollWorldHandler = "Gol.PollWorld"
 //EmptyRequest
 //Response
 
+var ResetHandler = "Gol.Reset"
+//EmptyRequest
+//EmptyResponse
+
 var ShutdownHandler = "Gol.Shutdown"
 //EmptyRequest
 //Response
-//
-//var QuitHandler = "Gol.Suspend"
-//EmptyRequest
-//Response
+
 

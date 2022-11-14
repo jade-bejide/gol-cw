@@ -103,16 +103,25 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 
 func takeTurns(g *Gol){
 	g.Turn = 0
+	run := make(chan bool)
+	run <- true
 	for g.Turn < g.Params.Turns {
-		g.WorldMut.Lock() //block if we're reading the current alive cells
-		g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
-		g.Turn++
-		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
-		//c.events <- TurnComplete{turn}
-		if(g.Turn % 50 == 0) {
-			fmt.Println("im on turn ", g.Turn)
+		select{
+			case <-g.Done:
+				return
+			case <-run:
+				g.WorldMut.Lock() //block if we're reading the current alive cells
+				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
+				g.Turn++
+				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
+				//c.events <- TurnComplete{turn}
+				if(g.Turn % 50 == 0) {
+					fmt.Println("im on turn ", g.Turn)
+				}
+				run <- true
 		}
 	}
+	return
 }
 
 func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
@@ -130,11 +139,17 @@ func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	return cells
 }
 
+func resetGol(g *Gol){
+	g.Params = stubs.Params{}
+	g.World = *new([][]uint8)
+}
+
 type Gol struct {
 	Params stubs.Params
 	World [][]uint8
 	WorldMut sync.Mutex
 	Turn int
+	Done chan bool
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
@@ -142,6 +157,7 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 
 	g.World = req.World
 	g.Turn = 0
+	g.Done = make(chan bool, 1)
 
 	takeTurns(g)
 
@@ -170,6 +186,13 @@ func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error)
 	//fmt.Printf("The world looks like")
 	//fmt.Println(res.World)
 
+	return
+}
+
+func (g *Gol) Reset(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
+	g.WorldMut.Lock()
+	g.Done <- true
+	g.WorldMut.Unlock()
 	return
 }
 
