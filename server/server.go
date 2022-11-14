@@ -109,6 +109,9 @@ func takeTurns(g *Gol){
 		g.Turn++
 		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
 		//c.events <- TurnComplete{turn}
+		if(g.Turn % 1000 == 0) {
+			fmt.Println("im on turn %v", g.Turn)
+		}
 	}
 }
 
@@ -148,7 +151,7 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	return
 }
 
-func (g *Gol) AliveHandler(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
+func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
 	g.WorldMut.Lock()
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
@@ -161,8 +164,8 @@ func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.WorldResponse) (err e
 	g.WorldMut.Lock()
 	res.World = g.World
 	res.Turn = g.Turn
-	fmt.Println(res.World)
 	g.WorldMut.Unlock()
+	fmt.Println("I am responding with the world")
 
 	return
 }

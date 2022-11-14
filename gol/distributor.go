@@ -245,6 +245,8 @@ Distributed part (2)
 // }
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
+	fmt.Printf("final %v; called on %v\n", p.Turns, currentTurn)
+
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
 	c.ioCommand <- ioOutput
 	c.ioFilename <- filename
@@ -313,12 +315,17 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 			res := stubs.WorldResponse{}
 
 			done := make(chan *rpc.Call, 1)
-			client.Go(stubs.PollWorldHandler, req, res, done)
-			<-done
+			promise := client.Go(stubs.PollWorldHandler, req, res, done)
+			<-promise.Done
+			<-promise.Done
+			<-promise.Done
+			//for len(res.World) <= 1{
+			//	fmt.Println("there is no world")
+			//}
 			fmt.Println("Generating PGM of")
 			fmt.Println(res.World)
 
-			sendWriteCommand(p, c, res.Turn, res.World)
+			//sendWriteCommand(p, c, res.Turn, res.World)
 
 			fmt.Println("Generated PGM")
 
@@ -390,7 +397,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: alive}
 
 	c.events <- final //sending event down events channel
-	sendWriteCommand(p, c, p.Turns, world)
+	sendWriteCommand(p, c, res.Turn, world)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
