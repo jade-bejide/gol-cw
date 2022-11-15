@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	_ "flag"
-	//"fmt"
+	"fmt"
 	_ "math/rand"
 	"net"
 	_ "net"
@@ -101,13 +101,19 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 
 func takeTurns(g *Gol){
 	g.Turn = 0
+	g.TurnMut.Lock()
 	for g.Turn < g.Params.Turns {
+		g.TurnMut.Unlock()
 		g.WorldMut.Lock() //block if we're reading the current alive cells
 		g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
 		g.Turn++
 		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
+		g.TurnMut.Lock()
 		//c.events <- TurnComplete{turn}
 	}
+	g.TurnMut.Unlock()
+
+	//done <- true
 }
 
 func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
@@ -130,15 +136,19 @@ type Gol struct {
 	World [][]uint8
 	WorldMut sync.Mutex
 	Turn int
+	TurnMut sync.Mutex
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
+
 	g.Params = stubs.Params(req.Params)
 
 	g.World = req.World
 	g.Turn = 0
 
+	//done := make(chan bool)
 	takeTurns(g)
+	//<-done
 
 
 
@@ -148,11 +158,33 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	return
 }
 
-func (g *Gol) AliveHandler(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
+//before a client closes, it calls the server to reset the world
+func (g *Gol) ResetWorld(req stubs.CloseRequest, res *stubs.CloseResponse) (err error) {
+	fmt.Println("Closing client")
+	if req.Close == true {
+		g.World = make([][]uint8, 0)
+		g.Turn = 0
+		res.ResponseCode = 0
+	} else { res.ResponseCode = -1 }
+
+
+	return
+}
+
+
+func (g *Gol) ReportAlive(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
+
+	g.TurnMut.Lock()
 	g.WorldMut.Lock()
+
+
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
+	fmt.Println(res.Alive, res.OnTurn)
+	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
+
+
 
 
 	return

@@ -6,6 +6,7 @@ import (
 
 var TurnsHandler = "Gol.TakeTurns"
 var AliveHandler = "Gol.ReportAlive"
+var CloseHandler = "Gol.ResetWorld"
 
 type Params struct {
 	Turns       int
@@ -30,5 +31,13 @@ type AliveRequest struct {}
 type AliveResponse struct {
 	Alive int
 	OnTurn int
+}
+
+type CloseRequest struct {
+	Close bool
+}
+
+type CloseResponse struct {
+	ResponseCode int
 }
 
