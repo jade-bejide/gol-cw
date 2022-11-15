@@ -96,7 +96,7 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 		}
 		x += 1
 	}
-	//fmt.Println(nextWorld)
+
 	return nextWorld
 }
 
@@ -106,20 +106,22 @@ func takeTurns(g *Gol){
 	for g.Turn < g.Params.Turns {
 		select{
 			case <-g.Done:
+				g.TurnMut.Unlock()
 				fmt.Println("finished")
 				return
 			default:
-        g.TurnMut.Unlock()
+        		g.TurnMut.Unlock()
 				g.WorldMut.Lock() //block if we're reading the current alive cells
 				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
 				g.Turn++
 				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
-        g.TurnMut.Lock()
+        		g.TurnMut.Lock()
 				//c.events <- TurnComplete{turn}
 				fmt.Println("im on turn ", g.Turn)
 		}
-    g.TurnMut.Unlock()
+
 	}
+	g.TurnMut.Unlock()
 	return
 }
 
@@ -139,11 +141,15 @@ func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 }
 
 func resetGol(g *Gol){
+	g.WorldMut.Lock()
+	g.TurnMut.Lock()
 	g.Params = stubs.Params{}
 	g.World = make([][]uint8, 0)
-	g.WorldMut = sync.Mutex{}
+
 	g.Turn = 0
 	g.Done = make(chan bool, 1)
+	g.TurnMut.Unlock()
+	g.WorldMut.Unlock()
 }
 
 type Gol struct {
@@ -167,27 +173,15 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	res.World = g.World
 	res.Turn = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
-	return
-}
-
-//before a client closes, it calls the server to reset the world
-func (g *Gol) ResetWorld(req stubs.CloseRequest, res *stubs.CloseResponse) (err error) {
-	fmt.Println("Closing client")
-	if req.Close == true {
-		g.World = make([][]uint8, 0)
-		g.Turn = 0
-		res.ResponseCode = 0
-	} else { res.ResponseCode = -1 }
-
 
 	return
 }
 
 
-func (g *Gol) ReportAlive(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
-
-	g.TurnMut.Lock()
+func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
 	g.WorldMut.Lock()
+	g.TurnMut.Lock()
+
 
 
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
@@ -216,9 +210,10 @@ func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error)
 
 func (g *Gol) Reset(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
 	g.Done <- true
-	g.WorldMut.Lock()
-	resetGol(g)
-	fmt.Println(g)
+	//g.TurnMut.Lock()
+	//g.WorldMut.Lock()
+	//resetGol(g)
+	//fmt.Println(g)
 	//g.WorldMut.Unlock() we have just reset (and therefor unlocked) the mutex so we do not unlock it again
 	return
 }
