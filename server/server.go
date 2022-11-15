@@ -103,28 +103,26 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 func takeTurns(g *Gol){
 	g.Turn = 0
 	g.TurnMut.Lock()
+
 	for g.Turn < g.Params.Turns {
 		select{
 			case x := <-g.Pause:
-				//block here
-				if x == true {
-
-				} else {
-
-				}
+				fmt.Println("REACH")
+				if x == true { g.Execute.Lock() } else { g.Execute.Unlock() }
 			case <-g.Done:
 				g.TurnMut.Unlock()
 				fmt.Println("finished")
 				return
 			default:
+				g.Execute.Lock()
         		g.TurnMut.Unlock()
 				g.WorldMut.Lock() //block if we're reading the current alive cells
 				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
 				g.Turn++
 				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
         		g.TurnMut.Lock()
+				g.Execute.Unlock()
 				//c.events <- TurnComplete{turn}
-				fmt.Println("im on turn ", g.Turn)
 		}
 
 	}
@@ -165,7 +163,9 @@ type Gol struct {
 	WorldMut sync.Mutex
 	Turn int
 	Done chan bool
-  TurnMut sync.Mutex //add to reset 
+	Pause chan bool
+	Execute sync.Mutex
+  	TurnMut sync.Mutex //add to reset
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
@@ -181,6 +181,13 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	res.Turn = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
 
+	return
+}
+
+func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.EmptyResponse) (err error) {
+	fmt.Println(req.Pause)
+	g.Pause <- req.Pause
+	//fmt.Println("YIPPEE")
 	return
 }
 

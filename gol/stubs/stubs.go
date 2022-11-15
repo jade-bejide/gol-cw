@@ -45,3 +45,8 @@ var ShutdownHandler = "Gol.Shutdown"
 //EmptyRequest
 //Response
 
+var PauseHandler = "Gol.PauseGol"
+type PauseRequest struct {
+	Pause bool
+}
+
