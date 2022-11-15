@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/rpc"
 	_ "sync"
+	"time"
 	_ "time"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -27,7 +28,7 @@ Distributed part (2)
 
 // <<<<<<< feature-server //my incoming branch 
 // //constants
-// const aliveCellsPollDelay = 2 * time.Second
+const aliveCellsPollDelay = 2 * time.Second
 
 // //type Boolean struct {
 // //	B bool
@@ -225,25 +226,30 @@ Distributed part (2)
 // //}
 
 // =======
-// >>>>>>> dev-distributed //jade's previously commited changes
 
 
 
 //we only ever need write to events, and read from turns
-// func ticks(p Params, events chan<- Event, turns *Turns, world *SharedWorld, pollRate time.Duration) {
-// 	ticker := time.NewTicker(pollRate)
-// 	for {
-// 		select {
-// 		case <-done:
-// 			return
-// 		case <-ticker.C:
-// 			//critical section, we want to report while calculation is paused
-// 			world.mut.Lock()
-// 			events <- AliveCellsCount{turns.T, len(calculateAliveCells(p, world.W))}
-// 			world.mut.Unlock()
-// 		}
-// 	}
-// }
+func ticks(c distributorChannels, client *rpc.Client, done <-chan bool) {
+	//newRound :=
+	ticker := time.NewTicker(aliveCellsPollDelay)
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			req := stubs.AliveRequest{}
+
+			res := new(stubs.AliveResponse)
+			//func (client *Client) Go(serviceMethod string, args any, reply any, done chan *Call) *Call
+
+			done := make(chan *rpc.Call, 1)
+			callRes := client.Go(stubs.AliveHandler, req, res, done)
+			<-callRes.Done
+			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: res.Alive}
+		}
+	}
+}
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
 	//fmt.Printf("final %v; called on %v\n", p.Turns, currentTurn)
@@ -382,6 +388,9 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
     req := stubs.Request{World: world, Params: stubs.Params(p)}
     res := new(stubs.Response)
 
+	done := make(chan bool)
+	go ticks(c, client, done)
+
 	remoteDone := make(chan *rpc.Call, 1)
     call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
 
@@ -415,11 +424,10 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	//fmt.Println("CALL FINISHED ", call.ServiceMethod)
 
-
     // finalTurns := res.Turns       this property was unused, just need to avoid errors we shall add it back later
 
 //     assert p.Turns == finalTurns
-// 	go ticks(p, c.events, &sharedTurns, &sharedWorld, aliveCellsPollDelay)
+
 // 	go handleSDL(p, c, keyPresses, &sharedTurns, &sharedWorld, &pauseLock)
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
@@ -427,13 +435,19 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	final := FinalTurnComplete{CompletedTurns: turns, Alive: alive}
 
 	c.events <- final //sending event down events channel
-	sendWriteCommand(p, c, turns, world)
+
+	sendWriteCommand(p, c, p.Turns, world)
+
+
+
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
+  
+	c.events <- StateChange{p.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
 
-	c.events <- StateChange{turns, Quitting}
+	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }

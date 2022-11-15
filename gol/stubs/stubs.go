@@ -45,4 +45,3 @@ var ShutdownHandler = "Gol.Shutdown"
 //EmptyRequest
 //Response
 
-
