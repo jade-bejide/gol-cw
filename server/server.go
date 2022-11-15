@@ -105,6 +105,13 @@ func takeTurns(g *Gol){
 	g.TurnMut.Lock()
 	for g.Turn < g.Params.Turns {
 		select{
+			case x := <-g.Pause:
+				//block here
+				if x == true {
+
+				} else {
+
+				}
 			case <-g.Done:
 				g.TurnMut.Unlock()
 				fmt.Println("finished")
