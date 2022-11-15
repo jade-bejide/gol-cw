@@ -354,7 +354,18 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: alive}
 
 	c.events <- final //sending event down events channel
+
+	closeReq := stubs.CloseRequest{Close: true}
+	closeRes := new(stubs.CloseResponse)
+
+	closeCh := make(chan *rpc.Call, 1)
+	client.Go(stubs.CloseHandler, closeReq, closeRes, closeCh)
+	<-closeCh
+
 	sendWriteCommand(p, c, p.Turns, world)
+
+
+
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
@@ -363,12 +374,6 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	c.events <- StateChange{p.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
 
 
-	closeReq := stubs.CloseRequest{Close: true}
-	closeRes := new(stubs.CloseResponse)
-
-	closeCh := make(chan *rpc.Call, 1)
-	client.Go(stubs.CloseHandler, closeReq, closeRes, closeCh)
-	<-closeCh
 
 	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.

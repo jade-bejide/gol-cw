@@ -101,16 +101,17 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 
 func takeTurns(g *Gol){
 	g.Turn = 0
+	g.TurnMut.Lock()
 	for g.Turn < g.Params.Turns {
-		fmt.Println("!!")
-	    g.TurnMut.Lock()
+		g.TurnMut.Unlock()
 		g.WorldMut.Lock() //block if we're reading the current alive cells
 		g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
 		g.Turn++
 		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
-		g.TurnMut.Unlock()
+		g.TurnMut.Lock()
 		//c.events <- TurnComplete{turn}
 	}
+	g.TurnMut.Unlock()
 
 	//done <- true
 }
@@ -140,7 +141,6 @@ type Gol struct {
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 
-	fmt.Println("bbbaaa")
 	g.Params = stubs.Params(req.Params)
 
 	g.World = req.World
@@ -174,15 +174,15 @@ func (g *Gol) ResetWorld(req stubs.CloseRequest, res *stubs.CloseResponse) (err 
 
 func (g *Gol) ReportAlive(req stubs.AliveRequest, res *stubs.AliveResponse) (err error){
 
-	//g.TurnMut.Lock()
-	//g.WorldMut.Lock()
+	g.TurnMut.Lock()
+	g.WorldMut.Lock()
 
 
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
 	fmt.Println(res.Alive, res.OnTurn)
-	//g.TurnMut.Unlock()
-	//g.WorldMut.Unlock()
+	g.TurnMut.Unlock()
+	g.WorldMut.Unlock()
 
 
 
