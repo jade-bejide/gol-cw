@@ -4,10 +4,6 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
-var TurnsHandler = "Gol.TakeTurns"
-var AliveHandler = "Gol.ReportAlive"
-var CloseHandler = "Gol.ResetWorld"
-
 type Params struct {
 	Turns       int
 	Threads     int
@@ -15,29 +11,37 @@ type Params struct {
 	ImageHeight int
 }
 
-type Response struct {
-	World [][]uint8 //final world
-	Turns int //to report to distributor events
-	Alive []util.Cell //alive cells to report to distributor events
-}
+type EmptyRequest struct {}
+type EmptyResponse struct{}
 
+var TurnsHandler = "Gol.TakeTurns"
 type Request struct {
 	World  [][]uint8
 	Params Params
 }
+type Response struct {
+	World [][]uint8 //final world
+	Turn int //to report to distributor events
+	Alive []util.Cell //alive cells to report to distributor events
+}
 
-type AliveRequest struct {}
 
+var AliveHandler = "Gol.ReportAlive"
+//EmptyRequest
 type AliveResponse struct {
 	Alive int
 	OnTurn int
 }
 
-type CloseRequest struct {
-	Close bool
-}
+var PollWorldHandler = "Gol.PollWorld"
+//EmptyRequest
+//Response
 
-type CloseResponse struct {
-	ResponseCode int
-}
+var ResetHandler = "Gol.Reset"
+//EmptyRequest
+//EmptyResponse
+
+var ShutdownHandler = "Gol.Shutdown"
+//EmptyRequest
+//Response
 

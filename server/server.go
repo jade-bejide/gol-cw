@@ -4,6 +4,7 @@ import (
 	"flag"
 	_ "flag"
 	"fmt"
+	//"fmt"
 	_ "math/rand"
 	"net"
 	_ "net"
@@ -103,17 +104,23 @@ func takeTurns(g *Gol){
 	g.Turn = 0
 	g.TurnMut.Lock()
 	for g.Turn < g.Params.Turns {
-		g.TurnMut.Unlock()
-		g.WorldMut.Lock() //block if we're reading the current alive cells
-		g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
-		g.Turn++
-		g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
-		g.TurnMut.Lock()
-		//c.events <- TurnComplete{turn}
+		select{
+			case <-g.Done:
+				fmt.Println("finished")
+				return
+			default:
+        g.TurnMut.Unlock()
+				g.WorldMut.Lock() //block if we're reading the current alive cells
+				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
+				g.Turn++
+				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
+        g.TurnMut.Lock()
+				//c.events <- TurnComplete{turn}
+				fmt.Println("im on turn ", g.Turn)
+		}
+    g.TurnMut.Unlock()
 	}
-	g.TurnMut.Unlock()
-
-	//done <- true
+	return
 }
 
 func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
@@ -131,29 +138,34 @@ func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	return cells
 }
 
+func resetGol(g *Gol){
+	g.Params = stubs.Params{}
+	g.World = make([][]uint8, 0)
+	g.WorldMut = sync.Mutex{}
+	g.Turn = 0
+	g.Done = make(chan bool, 1)
+}
+
 type Gol struct {
 	Params stubs.Params
 	World [][]uint8
 	WorldMut sync.Mutex
 	Turn int
-	TurnMut sync.Mutex
+	Done chan bool
+  TurnMut sync.Mutex //add to reset 
 }
 
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
-
+	resetGol(g)
 	g.Params = stubs.Params(req.Params)
-
 	g.World = req.World
-	g.Turn = 0
 
 	//done := make(chan bool)
 	takeTurns(g)
 	//<-done
 
-
-
 	res.World = g.World
-	res.Turns = g.Turn
+	res.Turn = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
 	return
 }
@@ -184,9 +196,30 @@ func (g *Gol) ReportAlive(req stubs.AliveRequest, res *stubs.AliveResponse) (err
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
 
+	return
+}
+
+func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
+	g.WorldMut.Lock()
+	res.World = g.World
+	res.Turn = g.Turn
+	res.Alive = calculateAliveCells(g.Params, g.World)
+	g.WorldMut.Unlock()
+	//fmt.Println("I am responding with the world on turn", res.Turn)
+	//fmt.Printf("The world looks like")
+	//fmt.Println(res.World)
 
 
 
+	return
+}
+
+func (g *Gol) Reset(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
+	g.Done <- true
+	g.WorldMut.Lock()
+	resetGol(g)
+	fmt.Println(g)
+	//g.WorldMut.Unlock() we have just reset (and therefor unlocked) the mutex so we do not unlock it again
 	return
 }
 
@@ -198,5 +231,6 @@ func main() {
 	listener, err := net.Listen("tcp", ":"+*portPtr)
 	if(err != nil) { panic(err) }
 	defer listener.Close()
+	fmt.Println("server listening on port "+*portPtr)
 	rpc.Accept(listener)
 }

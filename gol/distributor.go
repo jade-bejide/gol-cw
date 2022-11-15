@@ -7,6 +7,7 @@ import (
 	"time"
 	_ "time"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
+	"uk.ac.bris.cs/gameoflife/util"
 )
 
 type distributorChannels struct {
@@ -251,6 +252,8 @@ func ticks(c distributorChannels, client *rpc.Client, done <-chan bool) {
 }
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
+	//fmt.Printf("final %v; called on %v\n", p.Turns, currentTurn)
+
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
 	c.ioCommand <- ioOutput
 	c.ioFilename <- filename
@@ -306,6 +309,58 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 // 	}
 // }
 
+func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, done <-chan bool, doneTurns chan<- bool){
+	isPaused := false
+	for {
+		select{
+			case <-done:
+				return
+
+			case k := <-keyPresses:
+				switch k {
+				case 's':
+					//request current state through stubs package
+					//write the pgm out
+					req := stubs.EmptyRequest{}
+					res := new(stubs.Response)
+
+					remoteDone := make(chan *rpc.Call, 1)
+					call := client.Go(stubs.PollWorldHandler, req, res, remoteDone)
+					<-call.Done
+					//fmt.Println("CALL FINSIHED FROM KEYPRESSER ", call.ServiceMethod)
+					//fmt.Println("RESPONSE TURNS", res, "REPLY TURNS", call.Reply)
+
+					fmt.Println("Generating PGM")
+					sendWriteCommand(p, c, res.Turn, res.World)
+					fmt.Println("Generated PGM")
+
+					break
+				case 'q':
+					//close controller
+					doneTurns <- true
+					return
+				case 'k':
+					//request closure of server through stubs package
+					fmt.Println("Shutting down remote and local components")
+					break
+				case 'p':
+					//request pausing of aws node through stubs package
+					//then print the current turn
+					//once p is pressed again resume processing through requesting from stubs
+					if(!isPaused){
+						fmt.Println("Paused")
+						isPaused = true
+					}else{
+						fmt.Println("Continuing")
+						isPaused = false
+					}
+					break
+				default:
+					break
+				}
+		}
+	}
+}
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client) {
@@ -325,23 +380,49 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 			world[y][x] = pixel
 		}
 	}
+
+	doneKeyPresses := make(chan bool)
+	doneTakeTurns  := make(chan bool)
+	go handleKeyPresses(p, c, client, keyPresses, doneKeyPresses, doneTakeTurns)
+
     req := stubs.Request{World: world, Params: stubs.Params(p)}
     res := new(stubs.Response)
 
 	done := make(chan bool)
 	go ticks(c, client, done)
 
-	takeTurnsCh := make(chan *rpc.Call, 1)
-    client.Go("Gol.TakeTurns", req, res, takeTurnsCh)
-	<-takeTurnsCh
+	remoteDone := make(chan *rpc.Call, 1)
+    call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
 
+	var alive []util.Cell
+	var turns int
+	var emptyReq stubs.EmptyRequest
+	var worldRes *stubs.Response
 
+	select {
+		case <-call.Done: //we terminate on finishing the number of turns
+			doneKeyPresses <- true //tell keypresses to stop
+			world = res.World
+			alive = res.Alive
+			turns = p.Turns
+		case <-doneTakeTurns: //we quit early, and poll the world once more to exit correctly
+			//poll
+			emptyReq = stubs.EmptyRequest{}
+			worldRes = new(stubs.Response)
+			client.Call(stubs.PollWorldHandler, emptyReq, worldRes)
+			//...then shutdown
+			fmt.Println("Shutting down local component")
+			err := client.Call(stubs.ResetHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
+			if err != nil {
+				panic(err)
+			}
 
+			world = worldRes.World
+			alive = worldRes.Alive
+			turns = worldRes.Turn
+	}
 
-    world = res.World
-
-    alive := res.Alive
-
+	//fmt.Println("CALL FINISHED ", call.ServiceMethod)
 
     // finalTurns := res.Turns       this property was unused, just need to avoid errors we shall add it back later
 
@@ -351,16 +432,9 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
-	final := FinalTurnComplete{CompletedTurns: p.Turns, Alive: alive}
+	final := FinalTurnComplete{CompletedTurns: turns, Alive: alive}
 
 	c.events <- final //sending event down events channel
-
-	closeReq := stubs.CloseRequest{Close: true}
-	closeRes := new(stubs.CloseResponse)
-
-	closeCh := make(chan *rpc.Call, 1)
-	client.Go(stubs.CloseHandler, closeReq, closeRes, closeCh)
-	<-closeCh
 
 	sendWriteCommand(p, c, p.Turns, world)
 
@@ -370,10 +444,8 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
-
+  
 	c.events <- StateChange{p.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
-
-
 
 	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
