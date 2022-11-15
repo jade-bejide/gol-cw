@@ -331,11 +331,6 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 					break
 				case 'q':
 					//close controller
-					fmt.Println("Shutting down local component")
-					err := client.Call(stubs.ResetHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
-					if err != nil {
-						panic(err)
-					}
 					doneTurns <- true
 					return
 				case 'k':
@@ -402,9 +397,17 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 			alive = res.Alive
 			turns = p.Turns
 		case <-doneTakeTurns: //we quit early, and poll the world once more to exit correctly
+			//poll
 			emptyReq = stubs.EmptyRequest{}
 			worldRes = new(stubs.Response)
 			client.Call(stubs.PollWorldHandler, emptyReq, worldRes)
+			//...then shutdown
+			fmt.Println("Shutting down local component")
+			err := client.Call(stubs.ResetHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
+			if err != nil {
+				panic(err)
+			}
+
 			world = worldRes.World
 			alive = worldRes.Alive
 			turns = worldRes.Turn

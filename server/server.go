@@ -114,9 +114,7 @@ func takeTurns(g *Gol){
 				g.Turn++
 				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
 				//c.events <- TurnComplete{turn}
-				if(g.Turn % 50 == 0) {
-					fmt.Println("im on turn ", g.Turn)
-				}
+				fmt.Println("im on turn ", g.Turn)
 		}
 	}
 	return
@@ -189,9 +187,10 @@ func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error)
 }
 
 func (g *Gol) Reset(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
-	g.WorldMut.Lock()
 	g.Done <- true
+	g.WorldMut.Lock()
 	resetGol(g)
+	fmt.Println(g)
 	//g.WorldMut.Unlock() we have just reset (and therefor unlocked) the mutex so we do not unlock it again
 	return
 }
