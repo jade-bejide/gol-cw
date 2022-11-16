@@ -2,7 +2,6 @@ package gol
 
 import (
 	"fmt"
-	"log"
 	"net/rpc"
 	_ "sync"
 	"time"
@@ -94,7 +93,7 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 func finishServer(client *rpc.Client){
 	err := client.Call(stubs.FinishHander, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
 	if err != nil {
-		log.Fatalf("Error client couldn't Finish server %s", err)
+		fmt.Printf("Error client couldn't Finish server %s\n", err)
 	}
 }
 

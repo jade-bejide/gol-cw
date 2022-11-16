@@ -1,10 +1,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	_ "flag"
 	"fmt"
-	"log"
+	"time"
 
 	//"fmt"
 	_ "math/rand"
@@ -278,6 +279,13 @@ func (g *Gol) Kill(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error)
 	return
 }
 
+func runServer(s *rpc.Server, l *net.Listener){
+	go s.Accept(*l)
+	<-kill
+	fmt.Println("closed acceptor")
+	return
+}
+
 func main() {
 	portPtr := flag.String("port", "8030", "port used; default: 8030")
 	flag.Parse()
@@ -285,16 +293,26 @@ func main() {
 	server := rpc.NewServer()
 	err := server.Register(&Gol{})
 	if err != nil {
-		log.Fatalf("Error registering new rpc server with Gol struct; %s", err)
+		fmt.Printf("Error registering new rpc server with Gol struct; %s\n", err)
 	}
 	listener, err := net.Listen("tcp", ":"+*portPtr)
 	if(err != nil) { panic(err) }
-	defer listener.Close()
 	fmt.Println("server listening on port "+*portPtr)
 
-	go server.Accept(listener)
+	runServer(server, &listener)
 
-	<-kill
 	fmt.Println("server waiting for all calls to terminate")
 	runningCalls.Wait()
+	fmt.Println("all calls terminated")
+
+	//try to close the server
+	err = listener.Close()
+	if errors.Is(err, rpc.ErrShutdown){
+		fmt.Printf("Connection is already shut down; %s\n", err)
+	}else if err != nil {
+		fmt.Printf("Error trying to use/Close() listener; %s\n", err)
+	}
+
+	time.Sleep(2 * time.Second)
+
 }
