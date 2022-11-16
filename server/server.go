@@ -4,6 +4,8 @@ import (
 	"flag"
 	_ "flag"
 	"fmt"
+	"log"
+
 	//"fmt"
 	_ "math/rand"
 	"net"
@@ -14,6 +16,9 @@ import (
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
+
+var kill = make(chan bool, 1)
+var runningCalls = sync.WaitGroup{}
 
 // helpers
 
@@ -101,13 +106,12 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 }
 
 func takeTurns(g *Gol){
-	g.Turn = 0
 	g.TurnMut.Lock()
+	g.Turn = 0
 	for g.Turn < g.Params.Turns {
 		select{
 			case <-g.Done:
 				g.TurnMut.Unlock()
-				fmt.Println("finished")
 				return
 			default:
         		g.TurnMut.Unlock()
@@ -117,7 +121,7 @@ func takeTurns(g *Gol){
 				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
         		g.TurnMut.Lock()
 				//c.events <- TurnComplete{turn}
-				fmt.Println("im on turn ", g.Turn)
+				//fmt.Println("im on turn ", g.Turn)
 		}
 
 	}
@@ -141,48 +145,81 @@ func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 }
 
 func resetGol(g *Gol){
+
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
+
 	g.Params = stubs.Params{}
 	g.World = make([][]uint8, 0)
-
 	g.Turn = 0
 	g.Done = make(chan bool, 1)
+
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
+
+	//g.setParams(stubs.Params{})
+	//g.setWorld(make([][]uint8, 0))
+	//g.setTurn(0)
+	//g.setDone(make(chan bool, 1))
 }
 
 type Gol struct {
+	Mut sync.Mutex
+	WorldMut sync.Mutex
+	TurnMut sync.Mutex
 	Params stubs.Params
 	World [][]uint8
-	WorldMut sync.Mutex
 	Turn int
 	Done chan bool
-  TurnMut sync.Mutex //add to reset 
 }
 
+//internal methods (safe setters)
+func (g *Gol) setParams(p stubs.Params){
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	g.Params = p
+}
+
+func (g *Gol) setWorld(w [][]uint8){
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	g.World = w
+}
+
+func (g *Gol) setTurn(t int){
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	g.Turn = t
+}
+
+func (g *Gol) setDone(d chan bool){
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	g.Done = d
+}
+
+//RPC methods
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
+	runningCalls.Add(1); defer runningCalls.Done()
+	fmt.Println("started TakeTurns()")
+
 	resetGol(g)
 	g.Params = stubs.Params(req.Params)
 	g.World = req.World
 
-	//done := make(chan bool)
 	takeTurns(g)
-	//<-done
 
 	res.World = g.World
 	res.Turn = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
 
+	fmt.Println("stopped TakeTurns()")
 	return
 }
 
 
 func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
+	runningCalls.Add(1); defer runningCalls.Done()
+	fmt.Println("started ReportAlive()")
+
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
-
-
 
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
@@ -190,10 +227,14 @@ func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
 
+	fmt.Println("stopped ReportAlive()")
 	return
 }
 
 func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
+	runningCalls.Add(1); defer runningCalls.Done()
+	fmt.Println("started PollWorld()")
+
 	g.WorldMut.Lock()
 	res.World = g.World
 	res.Turn = g.Turn
@@ -203,18 +244,30 @@ func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error)
 	//fmt.Printf("The world looks like")
 	//fmt.Println(res.World)
 
-
-
+	fmt.Println("stopped PollWorld()")
 	return
 }
 
-func (g *Gol) Reset(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
+//asks the only looping rpc call to finish when ready (takeTurns())
+func (g *Gol) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
+	runningCalls.Add(1); defer runningCalls.Done()
+	fmt.Println("started Finish()")
+
 	g.Done <- true
-	//g.TurnMut.Lock()
-	//g.WorldMut.Lock()
-	//resetGol(g)
-	//fmt.Println(g)
-	//g.WorldMut.Unlock() we have just reset (and therefor unlocked) the mutex so we do not unlock it again
+
+	fmt.Println("stopped Finish()")
+	return
+}
+
+// lets the server know that it needs to shut down as soon as possible
+// returns the number of currently running rpc calls by reading the value of the waitgroup (will always return at least 1, since it includes itself)
+func (g *Gol) Kill(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
+	runningCalls.Add(1); defer runningCalls.Done()
+	fmt.Println("started Kill()")
+
+	kill <- true
+	fmt.Println("server set to close when ready")
+	fmt.Println("stopped Kill()")
 	return
 }
 
@@ -222,10 +275,19 @@ func main() {
 	portPtr := flag.String("port", "8030", "port used; default: 8030")
 	flag.Parse()
 	//rand.Seed(time.Now().UnixNano())
-	rpc.Register(&Gol{})
+	server := rpc.NewServer()
+	err := server.Register(&Gol{})
+	if err != nil {
+		log.Fatalf("Error registering new rpc server with Gol struct; %s", err)
+	}
 	listener, err := net.Listen("tcp", ":"+*portPtr)
 	if(err != nil) { panic(err) }
 	defer listener.Close()
 	fmt.Println("server listening on port "+*portPtr)
-	rpc.Accept(listener)
+
+	go server.Accept(listener)
+
+	<-kill
+	fmt.Println("server waiting for all calls to terminate")
+	runningCalls.Wait()
 }

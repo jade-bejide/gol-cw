@@ -2,6 +2,7 @@ package gol
 
 import (
 	"fmt"
+	"log"
 	"net/rpc"
 	_ "sync"
 	"time"
@@ -90,6 +91,13 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 	c.events <- ImageOutputComplete{CompletedTurns: currentTurn, Filename: filename}
 }
 
+func finishServer(client *rpc.Client){
+	err := client.Call(stubs.FinishHander, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
+	if err != nil {
+		log.Fatalf("Error client couldn't Finish server %s", err)
+	}
+}
+
 func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune){
 	isPaused := false
 	for {
@@ -111,16 +119,15 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 			sendWriteCommand(p, c, res.Turn, res.World)
 			fmt.Println("Generated PGM")
 		case 'q':
-			fmt.Println("Shutting down local component")
-			err := client.Call(stubs.ResetHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
-			if err != nil {
-				panic(err)
-			}
+			fmt.Println("Closing the controller client program")
+			//leave the server running
+			finishServer(client)
 			return
 		case 'k':
 			//request closure of server through stubs package
-			fmt.Println("Shutting down remote and local components")
-
+			fmt.Println("Closing all components of the distributed system")
+			finishServer(client)
+			return
 		case 'p':
 			//request pausing of aws node through stubs package
 			//then print the current turn
@@ -180,19 +187,20 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	alive = res.Alive
 	turns = res.Turn
 
+	client.Go(stubs.KillHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse), nil)
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	final := FinalTurnComplete{CompletedTurns: turns, Alive: alive}
 
 	c.events <- final //sending event down events channel
 
-	sendWriteCommand(p, c, p.Turns, world)
+	sendWriteCommand(p, c, turns, world)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
-  
-	c.events <- StateChange{p.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
+
+	c.events <- StateChange{turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
 
 	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
