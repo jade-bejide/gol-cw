@@ -106,22 +106,19 @@ func takeTurns(g *Gol){
 
 	for g.Turn < g.Params.Turns {
 		select{
-			case x := <-g.Pause:
+			case <-g.Pause:
 				fmt.Println("REACH")
-				if x == true { g.Execute.Lock() } else { g.Execute.Unlock() }
 			case <-g.Done:
 				g.TurnMut.Unlock()
 				fmt.Println("finished")
 				return
 			default:
-				g.Execute.Lock()
         		g.TurnMut.Unlock()
 				g.WorldMut.Lock() //block if we're reading the current alive cells
 				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
 				g.Turn++
 				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
         		g.TurnMut.Lock()
-				g.Execute.Unlock()
 				//c.events <- TurnComplete{turn}
 		}
 
@@ -164,7 +161,6 @@ type Gol struct {
 	Turn int
 	Done chan bool
 	Pause chan bool
-	Execute sync.Mutex
   	TurnMut sync.Mutex //add to reset
 }
 
@@ -184,10 +180,17 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	return
 }
 
-func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.EmptyResponse) (err error) {
+func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
 	fmt.Println(req.Pause)
 	g.Pause <- req.Pause
 	//fmt.Println("YIPPEE")
+
+    g.WorldMut.Lock()
+    g.TurnMut.Lock()
+	res.World = g.World
+	res.Turns = g.Turn
+    g.WorldMut.Unlock()
+    g.TurnMut.Unlock()
 	return
 }
 

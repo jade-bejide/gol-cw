@@ -50,3 +50,8 @@ type PauseRequest struct {
 	Pause bool
 }
 
+type PauseResponse struct {
+    World [][]byte
+    Turns int
+}
+

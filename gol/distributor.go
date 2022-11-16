@@ -126,17 +126,21 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 			//then print the current turn
 			//once p is pressed again resume processing through requesting from stubs
 			if(!isPaused){
-				fmt.Println("Paused")
 				donePause := make(chan *rpc.Call, 1)
-				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: true}, stubs.EmptyResponse{}, donePause)
+				pauseRes := new(stubs.PauseResponse)
+				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: true}, pauseRes, donePause)
 				<-doPause.Done
 				isPaused = true
+
+				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Paused}
 			}else{
-				fmt.Println("Continuing")
 				donePause := make(chan *rpc.Call, 1)
-				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: false}, stubs.EmptyResponse{}, donePause)
+				pauseRes := new(stubs.PauseResponse)
+				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: false}, pauseRes, donePause)
 				<-doPause.Done
 				isPaused = false
+
+				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Executing}
 			}
 
 		default:
