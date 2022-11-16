@@ -107,7 +107,7 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 
 func takeTurns(g *Gol){
 	g.TurnMut.Lock()
-	g.Turn = 0
+	g.setTurn(0)
 	for g.Turn < g.Params.Turns {
 		select{
 			case <-g.Done:
@@ -117,11 +117,11 @@ func takeTurns(g *Gol){
         		g.TurnMut.Unlock()
 				g.WorldMut.Lock() //block if we're reading the current alive cells
 				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
-				g.Turn++
+				g.setTurn(g.Turn + 1)
 				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
         		g.TurnMut.Lock()
 				//c.events <- TurnComplete{turn}
-				//fmt.Println("im on turn ", g.Turn)
+				fmt.Println("im on turn ", g.Turn)
 		}
 
 	}
@@ -146,21 +146,21 @@ func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 
 func resetGol(g *Gol){
 
-	g.WorldMut.Lock()
-	g.TurnMut.Lock()
+	//g.WorldMut.Lock()
+	//g.TurnMut.Lock()
+	//
+	//g.Params = stubs.Params{}
+	//g.World = make([][]uint8, 0)
+	//g.Turn = 0
+	//g.Done = make(chan bool, 1)
+	//
+	//g.TurnMut.Unlock()
+	//g.WorldMut.Unlock()
 
-	g.Params = stubs.Params{}
-	g.World = make([][]uint8, 0)
-	g.Turn = 0
-	g.Done = make(chan bool, 1)
-
-	g.TurnMut.Unlock()
-	g.WorldMut.Unlock()
-
-	//g.setParams(stubs.Params{})
-	//g.setWorld(make([][]uint8, 0))
-	//g.setTurn(0)
-	//g.setDone(make(chan bool, 1))
+	g.setParams(stubs.Params{})
+	g.setWorld(make([][]uint8, 0))
+	g.setTurn(0)
+	g.setDone(make(chan bool, 1))
 }
 
 type Gol struct {
@@ -200,14 +200,18 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	fmt.Println("started TakeTurns()")
 
 	resetGol(g)
-	g.Params = stubs.Params(req.Params)
-	g.World = req.World
+	g.setParams(stubs.Params(req.Params))
+	g.setWorld(req.World)
 
 	takeTurns(g)
 
+	g.WorldMut.Lock()
+	g.TurnMut.Lock()
 	res.World = g.World
 	res.Turn = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
+	g.TurnMut.Unlock()
+	g.WorldMut.Unlock()
 
 	fmt.Println("stopped TakeTurns()")
 	return
@@ -220,7 +224,6 @@ func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err
 
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
-
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
 	fmt.Println(res.Alive, res.OnTurn)
@@ -236,9 +239,11 @@ func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error)
 	fmt.Println("started PollWorld()")
 
 	g.WorldMut.Lock()
+	g.TurnMut.Lock()
 	res.World = g.World
 	res.Turn = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
+	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
 	//fmt.Println("I am responding with the world on turn", res.Turn)
 	//fmt.Printf("The world looks like")
@@ -253,7 +258,9 @@ func (g *Gol) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err erro
 	runningCalls.Add(1); defer runningCalls.Done()
 	fmt.Println("started Finish()")
 
+	g.Mut.Lock()
 	g.Done <- true
+	g.Mut.Unlock()
 
 	fmt.Println("stopped Finish()")
 	return
