@@ -1,12 +1,9 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	_ "flag"
 	"fmt"
-	"time"
-
 	//"fmt"
 	_ "math/rand"
 	"net"
@@ -307,12 +304,8 @@ func main() {
 
 	//try to close the server
 	err = listener.Close()
-	if errors.Is(err, rpc.ErrShutdown){
-		fmt.Printf("Connection is already shut down; %s\n", err)
-	}else if err != nil {
+	if err != nil {
 		fmt.Printf("Error trying to use/Close() listener; %s\n", err)
 	}
-
-	time.Sleep(2 * time.Second)
 
 }
