@@ -37,13 +37,13 @@ var PollWorldHandler = "Gol.PollWorld"
 //EmptyRequest
 //Response
 
-var ResetHandler = "Gol.Reset"
+var FinishHander = "Gol.Finish"
 //EmptyRequest
 //EmptyResponse
 
-var ShutdownHandler = "Gol.Shutdown"
+var KillHandler = "Gol.Kill"
 //EmptyRequest
-//Response
+//EmptyResponse
 
 var PauseHandler = "Gol.PauseGol"
 type PauseRequest struct {
