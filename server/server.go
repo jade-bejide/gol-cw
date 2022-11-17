@@ -119,7 +119,7 @@ func takeTurns(g *Gol){
 				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
         		g.TurnMut.Lock()
 				//c.events <- TurnComplete{turn}
-				fmt.Println("im on turn ", g.Turn)
+				// fmt.Println("im on turn ", g.Turn)
 		}
 
 	}
@@ -195,7 +195,7 @@ func (g *Gol) setDone(d chan bool){
 //RPC methods
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started TakeTurns()")
+	// fmt.Println("started TakeTurns()")
 
 	resetGol(g)
 	g.setParams(stubs.Params(req.Params))
@@ -211,30 +211,30 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
 
-	fmt.Println("stopped TakeTurns()")
+	// fmt.Println("stopped TakeTurns()")
 	return
 }
 
 
 func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started ReportAlive()")
+	// fmt.Println("started ReportAlive()")
 
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
 	res.Alive = len(calculateAliveCells(g.Params, g.World))
 	res.OnTurn = g.Turn
-	fmt.Println(res.Alive, res.OnTurn)
+	// fmt.Println(res.Alive, res.OnTurn)
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
 
-	fmt.Println("stopped ReportAlive()")
+	// fmt.Println("stopped ReportAlive()")
 	return
 }
 
 func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started PollWorld()")
+	// fmt.Println("started PollWorld()")
 
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
@@ -243,24 +243,24 @@ func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error)
 	res.Alive = calculateAliveCells(g.Params, g.World)
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
-	//fmt.Println("I am responding with the world on turn", res.Turn)
+	//// fmt.Println("I am responding with the world on turn", res.Turn)
 	//fmt.Printf("The world looks like")
-	//fmt.Println(res.World)
+	//// fmt.Println(res.World)
 
-	fmt.Println("stopped PollWorld()")
+	// fmt.Println("stopped PollWorld()")
 	return
 }
 
 //asks the only looping rpc call to finish when ready (takeTurns())
 func (g *Gol) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started Finish()")
+	// fmt.Println("started Finish()")
 
 	g.Mut.Lock()
 	g.Done <- true
 	g.Mut.Unlock()
 
-	fmt.Println("stopped Finish()")
+	// fmt.Println("stopped Finish()")
 	return
 }
 
@@ -268,18 +268,18 @@ func (g *Gol) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err erro
 // returns the number of currently running rpc calls by reading the value of the waitgroup (will always return at least 1, since it includes itself)
 func (g *Gol) Kill(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started Kill()")
+	// fmt.Println("started Kill()")
 
 	kill <- true
-	fmt.Println("server set to close when ready")
-	fmt.Println("stopped Kill()")
+	// fmt.Println("server set to close when ready")
+	// fmt.Println("stopped Kill()")
 	return
 }
 
 func runServer(s *rpc.Server, l *net.Listener){
 	go s.Accept(*l)
 	<-kill
-	fmt.Println("closed acceptor")
+	// fmt.Println("closed acceptor")
 	return
 }
 
@@ -294,13 +294,13 @@ func main() {
 	}
 	listener, err := net.Listen("tcp", ":"+*portPtr)
 	if(err != nil) { panic(err) }
-	fmt.Println("server listening on port "+*portPtr)
+	// fmt.Println("server listening on port "+*portPtr)
 
 	runServer(server, &listener)
 
-	fmt.Println("server waiting for all calls to terminate")
+	// fmt.Println("server waiting for all calls to terminate")
 	runningCalls.Wait()
-	fmt.Println("all calls terminated")
+	// fmt.Println("all calls terminated")
 
 	//try to close the server
 	err = listener.Close()
