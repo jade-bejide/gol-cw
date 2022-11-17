@@ -131,7 +131,6 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: true}, pauseRes, donePause)
 				<-doPause.Done
 				isPaused = true
-
 				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Paused}
 			}else{
 				donePause := make(chan *rpc.Call, 1)

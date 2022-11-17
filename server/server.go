@@ -4,7 +4,6 @@ import (
 	"flag"
 	_ "flag"
 	"fmt"
-	//"fmt"
 	_ "math/rand"
 	"net"
 	_ "net"
@@ -106,8 +105,6 @@ func takeTurns(g *Gol){
 
 	for g.Turn < g.Params.Turns {
 		select{
-			case <-g.Pause:
-				fmt.Println("REACH")
 			case <-g.Done:
 				g.TurnMut.Unlock()
 				fmt.Println("finished")
@@ -160,7 +157,6 @@ type Gol struct {
 	WorldMut sync.Mutex
 	Turn int
 	Done chan bool
-	Pause chan bool
   	TurnMut sync.Mutex //add to reset
 }
 
@@ -181,16 +177,16 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 }
 
 func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
-	fmt.Println(req.Pause)
-	g.Pause <- req.Pause
-	//fmt.Println("YIPPEE")
-
-    g.WorldMut.Lock()
-    g.TurnMut.Lock()
-	res.World = g.World
-	res.Turns = g.Turn
-    g.WorldMut.Unlock()
-    g.TurnMut.Unlock()
+	if req.Pause {
+	    g.WorldMut.Lock()
+	    g.TurnMut.Lock()
+	    res.World = g.World
+	    res.Turns = g.Turn
+	} else {
+	    res.Turns = g.Turn
+	    g.WorldMut.Unlock()
+	    g.TurnMut.Unlock()
+	 }
 	return
 }
 
