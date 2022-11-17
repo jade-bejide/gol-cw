@@ -97,7 +97,7 @@ func finishServer(client *rpc.Client){
 	}
 }
 
-func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune){
+func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, killServer chan<- bool) {
 	isPaused := false
 	for {
 		k := <-keyPresses
@@ -126,6 +126,7 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 			//request closure of server through stubs package
 			fmt.Println("Closing all components of the distributed system")
 			finishServer(client)
+			killServer <- true
 			return
 		case 'p':
 			//request pausing of aws node through stubs package
@@ -165,7 +166,8 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	}
 
 	//doneTakeTurns  := make(chan bool)
-	go handleKeyPresses(p, c, client, keyPresses)
+	killServer := make(chan bool, 1)
+	go handleKeyPresses(p, c, client, keyPresses, killServer)
 
     req := stubs.Request{World: world, Params: stubs.Params(p)}
     res := new(stubs.Response)
@@ -185,8 +187,11 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	world = res.World
 	alive = res.Alive
 	turns = res.Turn
-
-	client.Go(stubs.KillHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse), nil)
+	select {
+		case <-killServer:
+			client.Go(stubs.KillHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse), nil)
+		default:
+	}
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	final := FinalTurnComplete{CompletedTurns: turns, Alive: alive}
