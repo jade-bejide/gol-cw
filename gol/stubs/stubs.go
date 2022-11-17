@@ -45,3 +45,13 @@ var KillHandler = "Gol.Kill"
 //EmptyRequest
 //EmptyResponse
 
+var PauseHandler = "Gol.PauseGol"
+type PauseRequest struct {
+	Pause bool
+}
+
+type PauseResponse struct {
+    World [][]byte
+    Turns int
+}
+

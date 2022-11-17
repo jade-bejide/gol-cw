@@ -4,7 +4,6 @@ import (
 	"flag"
 	_ "flag"
 	"fmt"
-	//"fmt"
 	_ "math/rand"
 	"net"
 	_ "net"
@@ -105,7 +104,9 @@ func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byt
 
 func takeTurns(g *Gol){
 	g.TurnMut.Lock()
+
 	g.setTurn(0)
+
 	for g.Turn < g.Params.Turns {
 		select{
 			case <-g.Done:
@@ -119,7 +120,6 @@ func takeTurns(g *Gol){
 				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
         		g.TurnMut.Lock()
 				//c.events <- TurnComplete{turn}
-				fmt.Println("im on turn ", g.Turn)
 		}
 
 	}
@@ -212,6 +212,21 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	g.WorldMut.Unlock()
 
 	fmt.Println("stopped TakeTurns()")
+	return
+}
+
+func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
+	runningCalls.Add(1); defer runningCalls.Done()
+	if req.Pause {
+	    g.WorldMut.Lock()
+	    g.TurnMut.Lock()
+	    res.World = g.World
+	    res.Turns = g.Turn
+	} else {
+	    res.Turns = g.Turn
+	    g.WorldMut.Unlock()
+	    g.TurnMut.Unlock()
+	 }
 	return
 }
 
