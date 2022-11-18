@@ -4,6 +4,7 @@ import (
 	"flag"
 	"net"
 	"net/rpc"
+	"sync"
 )
 
 func spreadWorkload(h int, threads int) []int {
@@ -33,11 +34,18 @@ type ClientTask struct {
 	World [][]byte
 	Turns int
 }
+
+type Worker struct {
+	Ip string
+	Working bool
+	Lock sync.Mutex
+	Connection *rpc.Client
+}
 type Broker struct {
 	Threads int
 	World [][]byte
 	Turns int
-	Workers []string //have 16 workers by default, as this is the max size given in tests
+	Workers []Worker //have 16 workers by default, as this is the max size given in tests
 }
 
 func handleError(err error) {
@@ -50,6 +58,28 @@ func distributeWork() {
 
 }
 
+func takeWorkers(b *Broker) []Worker {
+	threads := b.Threads
+	workers := make([]Worker, 0)
+
+	totalworkers := 0
+	for _, worker := range b.Workers {
+		worker.Lock.lock()
+		if !worker.Working {
+			workers = append(workers, worker)
+			worker.Working = true
+			totalworkers++
+		}
+		worker.Lock.Unlock()
+
+		if totalworkers == threads { return workers }
+	}
+
+	return make([]Worker, 0) //if not all workers are available, no workers are available
+}
+
+
+
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	//threads
 	//world
@@ -57,10 +87,38 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	b.Threads = req.Threads
 	b.Turns = req.Turns
 	b.World = req.World
+	b.Height = req.Height
+	b.Width = req.Width
 
 	//send work to the gol workers
+	workSpread := spreadWorkload(b.Height, b.Threads)
+	workers := takeWorkers(b)
 
+	if len(workers) == 0 { return } //let client know that there are no workers available
+
+
+	for _, worker := range workers {
+		//connect to the worker
+		client, err := rpc.Dial("tcp", worker.Ip)
+		handleError(err)
+		worker.Connection = client
+	}
+
+	for i := 0; i < b.Turns; i++ {
+		for j := 0; j < workSpread; j++{
+			worker := workers[j]
+			y1 := workSpread[j]; y2 := workSpread[j+1]
+			//worker.Connection.Go()
+		}
+
+		//reconstruct the world to go again
+	}
 	//res = b.World
+
+	//close the workers after we're finished
+	for _, worker := range workers {
+		worker.Connection.Close()
+	}
 
 	return
 }
@@ -68,10 +126,10 @@ func main() {
 	pAddr := flag.String("port", "8030", "Port to listen on")
 	flag.Parse()
 
-	workers := make([]string, 3)
-	workers[0] = "ip1"
-	workers[1] = "ip2"
-	workers[2] = "ip3"
+	workers := make([]Worker, 3)
+	workers[0] = Worker{Ip: "ip1"}
+	workers[1] = Worker{Ip: "ip2"}
+	workers[2] = Worker{Ip: "ip3"}
 
 	rpc.Register(&Broker{Workers: workers})
 	listener, err := net.Listem("tcp", ":"+*pAddr)
