@@ -195,7 +195,6 @@ func (g *Gol) setDone(d chan bool){
 //RPC methods
 func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started TakeTurns()")
 
 	resetGol(g)
 	g.setParams(stubs.Params(req.Params))
@@ -211,7 +210,6 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
 
-	fmt.Println("stopped TakeTurns()")
 	return
 }
 
@@ -233,7 +231,6 @@ func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err er
 
 func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started ReportAlive()")
 
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
@@ -243,13 +240,11 @@ func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
 
-	fmt.Println("stopped ReportAlive()")
 	return
 }
 
 func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started PollWorld()")
 
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
@@ -262,20 +257,17 @@ func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error)
 	//fmt.Printf("The world looks like")
 	//fmt.Println(res.World)
 
-	fmt.Println("stopped PollWorld()")
 	return
 }
 
 //asks the only looping rpc call to finish when ready (takeTurns())
 func (g *Gol) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started Finish()")
 
 	g.Mut.Lock()
 	g.Done <- true
 	g.Mut.Unlock()
 
-	fmt.Println("stopped Finish()")
 	return
 }
 
@@ -283,11 +275,9 @@ func (g *Gol) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err erro
 // returns the number of currently running rpc calls by reading the value of the waitgroup (will always return at least 1, since it includes itself)
 func (g *Gol) Kill(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("started Kill()")
 
 	kill <- true
 	fmt.Println("server set to close when ready")
-	fmt.Println("stopped Kill()")
 	return
 }
 
