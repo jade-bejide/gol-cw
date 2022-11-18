@@ -105,7 +105,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	}
 
 	for i := 0; i < b.Turns; i++ {
-		for j := 0; j < workSpread; j++{
+		for j := 0; j < len(workSpread); j++{
 			worker := workers[j]
 			y1 := workSpread[j]; y2 := workSpread[j+1]
 			//worker.Connection.Go()
