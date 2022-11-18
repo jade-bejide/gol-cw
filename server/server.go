@@ -69,63 +69,51 @@ func countLiveNeighbours(p stubs.Params, x int, y int, world [][]byte) int {
 		return liveNeighbours
 	}
 
-func calculateNextState(p stubs.Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) [][]byte {
-	x := 0
+func calculateNextState(g *Gol, p stubs.Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) {
 
 	height := y2 - y1
 
-	nextWorld := genWorldBlock(height, p.ImageWidth)
-
-	for x < p.ImageWidth {
-		j := y1
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	for x := 0; x < p.ImageWidth; x++ {
 		for y := 0; y < height; y++ {
-			neighbours := countLiveNeighbours(p, x, j, world)
-			alive := isAlive(x, j, world)
-
+			yWorld := y + y1
+			neighbours := countLiveNeighbours(p, x, yWorld, world)
+			alive := isAlive(x, yWorld, world)
 			alive = updateState(alive, neighbours)
 
 			if alive {
-				nextWorld[y][x] = 255
+				g.Strip[y][x] = 255
 			} else {
-				nextWorld[y][x] = 0
+				g.Strip[y][x] = 0
 			}
-			if world[j][x] != nextWorld[y][x] {
-				//cell := util.Cell{X: x, Y: j}
-				//c.events <- CellFlipped{CompletedTurns: turn, Cell: cell}
-			}
-
-			j += 1
 		}
-		x += 1
 	}
-
-	return nextWorld
 }
 
-func takeTurns(g *Gol){
-	g.TurnMut.Lock()
-
-	g.setTurn(0)
-
-	for g.Turn < g.Params.Turns {
-		select{
-			case <-g.Done:
-				g.TurnMut.Unlock()
-				return
-			default:
-        		g.TurnMut.Unlock()
-				g.WorldMut.Lock() //block if we're reading the current alive cells
-				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
-				g.setTurn(g.Turn + 1)
-				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
-        		g.TurnMut.Lock()
-				//c.events <- TurnComplete{turn}
-		}
-
-	}
-	g.TurnMut.Unlock()
-	return
-}
+//func takeTurns(g *Gol){
+//	g.TurnMut.Lock()
+//
+//	g.setTurn(0)
+//
+//	for g.Turn < g.Params.Turns {
+//		select{
+//			case <-g.Done:
+//				g.TurnMut.Unlock()
+//				return
+//			default:
+//        		g.TurnMut.Unlock()
+//				g.WorldMut.Lock() //block if we're reading the current alive cells
+//				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
+//				g.setTurn(g.Turn + 1)
+//				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
+//        		g.TurnMut.Lock()
+//				//c.events <- TurnComplete{turn}
+//		}
+//
+//	}
+//	g.TurnMut.Unlock()
+//	return
+//}
 
 func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	var cells []util.Cell
@@ -165,8 +153,14 @@ type Gol struct {
 	Mut sync.Mutex
 	WorldMut sync.Mutex
 	TurnMut sync.Mutex
+
 	Params stubs.Params
+	Slice stubs.Slice
+	ID int
+
 	World [][]uint8
+	Strip [][]uint8
+
 	Turn int
 	Done chan bool
 }
@@ -192,73 +186,114 @@ func (g *Gol) setDone(d chan bool){
 	g.Done = d
 }
 
-//RPC methods
-func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
+func (g *Gol) setSlice(s stubs.Slice){
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	g.Slice = s
+}
+
+func (g *Gol) setID(id int){
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	g.ID = id
+}
+
+func (g *Gol) setStrip() (err error){ //depends entirely on slice, this means it can return errors
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	if g.Slice.To == 0 && g.Slice.From == 0 {
+		return err("Slice is nil")
+	}
+	if g.Params.ImageWidth == 0 {
+		return err("Params is nil")
+	}
+
+	subStrip := make([][]uint8, g.Slice.To - g.Slice.From)
+	for i := range subStrip {
+		subStrip[i] = make([]uint8, g.Params.ImageWidth)
+	}
+	return
+}
+
+func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
 
 	resetGol(g)
-	g.setParams(stubs.Params(req.Params))
+	g.setID(res.ID)
+	g.setSlice(req.Slice)
+	g.setParams(req.Params)
+
+	err = g.setStrip()
+	res.Slice = req.Slice
+
+	return err
+}
+
+//RPC methods
+func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
+	runningCalls.Add(1); defer runningCalls.Done()
+
 	g.setWorld(req.World)
+	calculateNextState(g, g.Params, /*_,*/ g.World, g.Slice.From, g.Slice.To, g.Turn)
 
-	takeTurns(g)
+	g.TurnMut.Lock() //we lock on read to avoid stale values and race conditions
+	g.setTurn(g.Turn + 1)
+	g.TurnMut.Unlock()
 
-	g.WorldMut.Lock()
-	g.TurnMut.Lock()
-	res.World = g.World
+	g.Mut.Lock()
+	res.ID = g.ID
+	res.Strip = g.World
+	res.Slice = g.Slice
 	res.Turn = g.Turn
 	res.Alive = calculateAliveCells(g.Params, g.World)
-	g.TurnMut.Unlock()
-	g.WorldMut.Unlock()
+	g.Mut.Unlock()
 
 	return
 }
 
-func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
-	runningCalls.Add(1); defer runningCalls.Done()
-	if req.Pause {
-	    g.WorldMut.Lock()
-	    g.TurnMut.Lock()
-	    res.World = g.World
-	    res.Turns = g.Turn
-	} else {
-	    res.Turns = g.Turn
-	    g.WorldMut.Unlock()
-	    g.TurnMut.Unlock()
-	 }
-	return
-}
+//func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
+//	runningCalls.Add(1); defer runningCalls.Done()
+//	if req.Pause {
+//	    g.WorldMut.Lock()
+//	    g.TurnMut.Lock()
+//	    res.World = g.World
+//	    res.Turns = g.Turn
+//	} else {
+//	    res.Turns = g.Turn
+//	    g.WorldMut.Unlock()
+//	    g.TurnMut.Unlock()
+//	 }
+//	return
+//}
 
 
-func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
-	runningCalls.Add(1); defer runningCalls.Done()
+//func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
+//	runningCalls.Add(1); defer runningCalls.Done()
+//
+//	g.WorldMut.Lock()
+//	g.TurnMut.Lock()
+//	res.Alive = len(calculateAliveCells(g.Params, g.World))
+//	res.OnTurn = g.Turn
+//	fmt.Println(res.Alive, res.OnTurn)
+//	g.TurnMut.Unlock()
+//	g.WorldMut.Unlock()
+//
+//	return
+//}
 
-	g.WorldMut.Lock()
-	g.TurnMut.Lock()
-	res.Alive = len(calculateAliveCells(g.Params, g.World))
-	res.OnTurn = g.Turn
-	fmt.Println(res.Alive, res.OnTurn)
-	g.TurnMut.Unlock()
-	g.WorldMut.Unlock()
-
-	return
-}
-
-func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
-	runningCalls.Add(1); defer runningCalls.Done()
-
-	g.WorldMut.Lock()
-	g.TurnMut.Lock()
-	res.World = g.World
-	res.Turn = g.Turn
-	res.Alive = calculateAliveCells(g.Params, g.World)
-	g.TurnMut.Unlock()
-	g.WorldMut.Unlock()
-	//fmt.Println("I am responding with the world on turn", res.Turn)
-	//fmt.Printf("The world looks like")
-	//fmt.Println(res.World)
-
-	return
-}
+//func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
+//	runningCalls.Add(1); defer runningCalls.Done()
+//
+//	g.WorldMut.Lock()
+//	g.TurnMut.Lock()
+//	res.World = g.World
+//	res.Turn = g.Turn
+//	res.Alive = calculateAliveCells(g.Params, g.World)
+//	g.TurnMut.Unlock()
+//	g.WorldMut.Unlock()
+//	//fmt.Println("I am responding with the world on turn", res.Turn)
+//	//fmt.Printf("The world looks like")
+//	//fmt.Println(res.World)
+//
+//	return
+//}
 
 //asks the only looping rpc call to finish when ready (takeTurns())
 func (g *Gol) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){

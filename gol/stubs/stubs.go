@@ -1,8 +1,6 @@
 package stubs
 
-import (
-	"uk.ac.bris.cs/gameoflife/util"
-)
+import "uk.ac.bris.cs/gameoflife/util"
 
 type Params struct {
 	Turns       int
@@ -11,16 +9,33 @@ type Params struct {
 	ImageHeight int
 }
 
+type Slice struct {
+	From int //y coordinates
+	To int
+}
+
 type EmptyRequest struct {}
 type EmptyResponse struct{}
 
-var TurnsHandler = "Gol.TakeTurns"
-type Request struct {
-	World  [][]uint8
+var SetupHandler = "Gol.Setup"
+type SetupRequest struct {
+	ID int
+	Slice Slice
 	Params Params
 }
+type SetupResponse struct {
+	ID int
+	Slice Slice //identify yourselves
+}
+
+var TurnHandler = "Gol.TakeTurn"
+type Request struct {
+	World [][]uint8 //whole world
+}
 type Response struct {
-	World [][]uint8 //final world
+	ID int
+	Strip [][]uint8 //final strip
+	Slice Slice
 	Turn int //to report to distributor events
 	Alive []util.Cell //alive cells to report to distributor events
 }
