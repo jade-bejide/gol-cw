@@ -70,3 +70,12 @@ type PauseResponse struct {
     Turns int
 }
 
+type NewClientRequest struct {
+	World [][]byte
+	Params Params
+}
+
+type NewClientResponse struct {
+	World [][]byte
+}
+

@@ -46,6 +46,7 @@ type Broker struct {
 	World [][]byte
 	Turns int
 	Workers []Worker //have 16 workers by default, as this is the max size given in tests
+	Params stubs.Params
 }
 
 func handleError(err error) {
@@ -84,11 +85,8 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	//threads
 	//world
 	//turns
-	b.Threads = req.Threads
-	b.Turns = req.Turns
 	b.World = req.World
-	b.Height = req.Height
-	b.Width = req.Width
+	b.Params = req.Params
 
 	//send work to the gol workers
 	workSpread := spreadWorkload(b.Height, b.Threads)
@@ -102,18 +100,26 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		client, err := rpc.Dial("tcp", worker.Ip)
 		handleError(err)
 		worker.Connection = client
+
+	}
+
+	for workerId := 0; workerId < len(workSpread); workerId++ {
+		worker := workers[workerId]
+		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
+
+		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params}
+		worker.Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
 	}
 
 	for i := 0; i < b.Turns; i++ {
-		for j := 0; j < len(workSpread); j++{
-			worker := workers[j]
-			y1 := workSpread[j]; y2 := workSpread[j+1]
-			//worker.Connection.Go()
+		for _, worker := range workers {
+			//turnReq :=
+			worker.Connection.Call(stubs.TurnHandler)
 		}
 
 		//reconstruct the world to go again
 	}
-	//res = b.World
+	//res.World = b.World
 
 	//close the workers after we're finished
 	for _, worker := range workers {
@@ -132,7 +138,7 @@ func main() {
 	workers[2] = Worker{Ip: "ip3"}
 
 	rpc.Register(&Broker{Workers: workers})
-	listener, err := net.Listem("tcp", ":"+*pAddr)
+	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
 
 	handleError(err)
 	defer listener.Close()
