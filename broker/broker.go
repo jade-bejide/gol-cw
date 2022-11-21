@@ -109,8 +109,9 @@ func (b *Broker) getNextWorld() [][]byte{
 	return *b.CurrentWorldPtr
 }
 
-func (b *Broker) getAliveCells() {
-	for _, worker := range b.Workers {
+func (b *Broker) getAliveCells(workers []Worker) {
+	//fmt.Println(b.Workers)
+	for _, worker := range workers {
 		aliveRes := new(stubs.AliveResponse)
 		worker.Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
 		b.Alive = append(b.Alive, aliveRes.Alive...)
@@ -145,10 +146,12 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	for workerId := 0; workerId < len(workers); workerId++ {
 		//connect to the worker
 		client, err := rpc.Dial("tcp", workers[workerId].Ip)
+
 		handleError(err)
 		workers[workerId].Connection = client
 
 	}
+
 
 	for workerId := 0; workerId < len(workers); workerId++ {
 		worker := workers[workerId]
@@ -166,8 +169,16 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	out := make(chan *stubs.Response)
 
-	b.getAliveCells()
-	fmt.Println(b.Turns)
+	if b.Params.Turns == 0 {
+
+		b.getAliveCells(workers)
+		fmt.Println(b.Params)
+		res.Alive = b.Alive
+		res.Turns = b.Turns
+		res.World = req.World
+		return
+	}
+
 	i := 0
 	for i < b.Turns {
 		turnResponses := make([]stubs.Response, noWorkers)
@@ -196,22 +207,23 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		for _, response := range turnResponses {
 			strip := response.Strip
 			for _, row := range strip {
-				(*b.NextWorldPtr)[rowNum] = row
+				b.getCurrentWorld()[rowNum] = row
 				rowNum++
 			}
 
 		}
-		b.alternateWorld()
+		//b.alternateWorld()
 		res.Turns++
 		//reconstruct the world to go again
 
-		b.getAliveCells()
+		b.getAliveCells(workers)
 		b.WorldsMut.Unlock()
 		b.TurnsMut.Lock()
 		i++
 		b.TurnsMut.Unlock()
 	}
-	res.World = req.World
+
+	res.World = b.getCurrentWorld()
 
 
 
@@ -222,7 +234,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	res.Alive = b.Alive
 
-	fmt.Println(b.Turns, len(b.Alive))
 
 	return
 }
@@ -242,7 +253,7 @@ func main() {
 	pAddr := flag.String("port", "8031", "Port to listen on")
 	flag.Parse()
 
-	workers := make([]Worker, 3)
+	workers := make([]Worker, 1 )
 	workers[0] = Worker{Ip: "localhost:8032"}
 	//workers[1] = Worker{Ip: "localhost:8033"}
 	//workers[2] = Worker{Ip: "localhost:8034"}

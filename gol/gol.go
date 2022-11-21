@@ -47,7 +47,6 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 		ioOutput:   ioOutput,
 		ioInput:    ioInput,
 	}
-
 	server := "localhost:8031" //to dial the broker
 	//adding rpc "server" to make call for work to ()
 	client, err := rpc.Dial("tcp", server)

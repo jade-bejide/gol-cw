@@ -119,8 +119,23 @@ func (g *Gol) calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	var cells []util.Cell
 
 	for x := 0; x < p.ImageWidth; x++{
-		for y := g.Slice.From; y < g.Slice.To; y++ {
+		for y := 0; y < p.ImageHeight; y++ {
 			if isAlive(x, y, world) {
+				c := util.Cell{x, y}
+				cells = append(cells, c)
+			}
+		}
+	}
+
+	return cells
+}
+
+func (g *Gol) aliveStrip() []util.Cell {
+	var cells []util.Cell
+
+	for x := 0; x < g.Params.ImageWidth; x++ {
+		for y := 0; y < len(g.Strip[0]); y++ {
+			if isAlive(x, y, g.Strip) {
 				c := util.Cell{x, y}
 				cells = append(cells, c)
 			}
@@ -234,8 +249,8 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 //RPC methods
 func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-
-	fmt.Println("Taking turn")
+	//
+	//fmt.Println("Taking turn")
 
 	g.setWorld(req.World)
 	calculateNextState(g, g.Params, /*_,*/ g.World, g.Slice.From, g.Slice.To, g.Turn)
@@ -246,10 +261,11 @@ func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 
 	g.Mut.Lock()
 	res.ID = g.ID
-	res.Strip = g.World
+	res.Strip = g.Strip
 	res.Slice = g.Slice
 	res.Turn = g.Turn
-	res.Alive = g.calculateAliveCells(g.Params, g.World)
+	res.Alive = g.calculateAliveCells(g.Params, g.Strip)
+
 	g.Mut.Unlock()
 
 	return
@@ -276,9 +292,12 @@ func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err
 
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
-	res.Alive = calculateAliveCells(g.Params, g.World)
+	if g.Params.Turns == 0 {
+		res.Alive = g.calculateAliveCells(g.Params, g.World)
+	} else {
+		res.Alive = g.aliveStrip()
+	}
 	res.OnTurn = g.Turn
-	fmt.Println(res.Alive, res.OnTurn)
 	g.TurnMut.Unlock()
 	g.WorldMut.Unlock()
 
