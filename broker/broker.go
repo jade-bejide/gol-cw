@@ -115,7 +115,8 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
 	*b.NextWorldPtr = req.World // to be overwritten
 	b.Params = req.Params
-	b.Threads = req.Threads
+	b.Threads = req.Params.Threads
+	b.Turns = req.Params.Turns
 
 	//send work to the gol workers
 	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
@@ -123,20 +124,24 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	if len(workers) == 0 { return } //let client know that there are no workers available
 
-	for _, worker := range workers {
+	for workerId := 0; workerId < len(workers); workerId++ {
 		//connect to the worker
-		client, err := rpc.Dial("tcp", worker.Ip)
+		client, err := rpc.Dial("tcp", workers[workerId].Ip)
 		handleError(err)
-		worker.Connection = client
+		workers[workerId].Connection = client
 
 	}
 
-	for workerId := 0; workerId < len(workSpread); workerId++ {
+	fmt.Println(workers)
+
+	for workerId := 0; workerId < len(workers); workerId++ {
 		worker := workers[workerId]
 		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
 
 		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params}
-		worker.Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
+		err = worker.Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
+
+		handleError(err)
 	}
 
 	noWorkers := len(b.Workers)
@@ -144,6 +149,8 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 
 	out := make(chan *stubs.Response)
+
+	fmt.Println(b.Turns)
 
 	for i := 0; i < b.Turns; i++ {
 		turnResponses := make([]stubs.Response, noWorkers)

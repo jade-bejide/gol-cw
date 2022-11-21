@@ -192,7 +192,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	params := stubs.Params{Turns: p.Turns, Threads: p.Threads, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight}
 
-	brokerReq := stubs.NewClientRequest{World: world, Params: params, Threads: 1}
+	brokerReq := stubs.NewClientRequest{World: world, Params: params}
 	brokerRes := new(stubs.NewClientResponse)
 
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)

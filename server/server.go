@@ -209,11 +209,15 @@ func (g *Gol) setStrip() (err error){ //depends entirely on slice, this means it
 	for i := range subStrip {
 		subStrip[i] = make([]uint8, g.Params.ImageWidth)
 	}
+
+	g.Strip = subStrip
 	return
 }
 
 func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
+
+	fmt.Println("Setting up")
 
 	resetGol(g)
 	g.setID(res.ID)
@@ -229,6 +233,8 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 //RPC methods
 func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
+
+	fmt.Println("Taking turn")
 
 	g.setWorld(req.World)
 	calculateNextState(g, g.Params, /*_,*/ g.World, g.Slice.From, g.Slice.To, g.Turn)
