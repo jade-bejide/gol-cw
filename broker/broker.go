@@ -47,6 +47,8 @@ type Worker struct {
 }
 type Broker struct {
 	Threads int
+	WorldsMut sync.Mutex
+	TurnsMut sync.Mutex
 	WorldA [][]byte // this is an optimisation that reduces the number of memory allocations on each turn
 	WorldB [][]byte // these worlds take turns to be the next world being written into
 	IsCurrentA bool
@@ -120,13 +122,19 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	//world
 	//turns
 
+	b.WorldsMut.Lock()
 	b.CurrentWorldPtr = &b.WorldA
 	b.NextWorldPtr = &b.WorldB
 	*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
 	*b.NextWorldPtr = req.World // to be overwritten
+	b.WorldsMut.Unlock()
+
 	b.Params = req.Params
 	b.Threads = req.Params.Threads
+
+	b.TurnsMut.Lock()
 	b.Turns = req.Params.Turns
+	b.TurnsMut.Unlock()
 
 	//send work to the gol workers
 	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
@@ -159,7 +167,9 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	out := make(chan *stubs.Response)
 
 	b.getAliveCells()
-	for i := 0; i < b.Turns; i++ {
+	fmt.Println(b.Turns)
+	i := 0
+	for i < b.Turns {
 		turnResponses := make([]stubs.Response, noWorkers)
 
 		//send a turn request to each worker selected
@@ -182,7 +192,8 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 		b.Alive = make([]util.Cell, 0)
 		rowNum := 0
-		for _, response := range turnResponses{
+		b.WorldsMut.Lock()
+		for _, response := range turnResponses {
 			strip := response.Strip
 			for _, row := range strip {
 				(*b.NextWorldPtr)[rowNum] = row
@@ -190,12 +201,15 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			}
 
 		}
-
 		b.alternateWorld()
 		res.Turns++
 		//reconstruct the world to go again
 
 		b.getAliveCells()
+		b.WorldsMut.Unlock()
+		b.TurnsMut.Lock()
+		i++
+		b.TurnsMut.Unlock()
 	}
 	res.World = req.World
 
@@ -209,6 +223,17 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	res.Alive = b.Alive
 
 	fmt.Println(b.Turns, len(b.Alive))
+
+	return
+}
+
+func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
+	b.WorldsMut.Lock()
+	b.TurnsMut.Lock()
+	res.Alive = b.Alive
+	res.OnTurn = b.Turns
+	b.TurnsMut.Lock()
+	b.WorldsMut.Unlock()
 
 	return
 }

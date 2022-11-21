@@ -45,7 +45,7 @@ type Response struct {
 var AliveHandler = "Gol.ReportAlive"
 //EmptyRequest
 type AliveResponse struct {
-	Alive int
+	Alive []util.Cell
 	OnTurn int
 }
 

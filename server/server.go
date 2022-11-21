@@ -249,7 +249,7 @@ func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 	res.Strip = g.World
 	res.Slice = g.Slice
 	res.Turn = g.Turn
-	res.Alive = calculateAliveCells(g.Params, g.World)
+	res.Alive = g.calculateAliveCells(g.Params, g.World)
 	g.Mut.Unlock()
 
 	return
@@ -276,7 +276,7 @@ func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err
 
 	g.WorldMut.Lock()
 	g.TurnMut.Lock()
-	res.Alive = len(calculateAliveCells(g.Params, g.World))
+	res.Alive = calculateAliveCells(g.Params, g.World)
 	res.OnTurn = g.Turn
 	fmt.Println(res.Alive, res.OnTurn)
 	g.TurnMut.Unlock()

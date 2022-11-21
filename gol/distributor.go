@@ -53,7 +53,7 @@ const aliveCellsPollDelay = 2 * time.Second
 
 
 //we only ever need write to events, and read from turns
-func ticks(c distributorChannels, client *rpc.Client, done <-chan bool) {
+func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
 	//newRound :=
 	ticker := time.NewTicker(aliveCellsPollDelay)
 	for {
@@ -66,10 +66,8 @@ func ticks(c distributorChannels, client *rpc.Client, done <-chan bool) {
 			res := new(stubs.AliveResponse)
 			//func (client *Client) Go(serviceMethod string, args any, reply any, done chan *Call) *Call
 
-			done := make(chan *rpc.Call, 1)
-			callRes := client.Go(stubs.AliveHandler, req, res, done)
-			<-callRes.Done
-			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: res.Alive}
+			broker.Call(stubs.AliveHandler, req, res)
+			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: len(res.Alive)}
 		}
 	}
 }
@@ -181,8 +179,8 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
     //req := stubs.Request{World: world, Params: stubs.Params(p)}
     //res := new(stubs.Response)
 	//
-	//done := make(chan bool)
-	//go ticks(c, client, done)
+	done := make(chan bool)
+	go ticks(c, client, done)
 	//
 	//remoteDone := make(chan *rpc.Call, 1)
     //call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
@@ -226,7 +224,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	//c.events <- StateChange{turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
 	//
-	//done <- true
+	done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }
