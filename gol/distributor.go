@@ -97,63 +97,63 @@ func finishServer(client *rpc.Client){
 	}
 }
 
-func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, killServer chan<- bool) {
-	isPaused := false
-	for {
-		k := <-keyPresses
-		switch k {
-		case 's':
-			//request current state through stubs package
-			//write the pgm out
-			req := stubs.EmptyRequest{}
-			res := new(stubs.Response)
-
-			remoteDone := make(chan *rpc.Call, 1)
-			call := client.Go(stubs.PollWorldHandler, req, res, remoteDone)
-			<-call.Done
-			//fmt.Println("CALL FINSIHED FROM KEYPRESSER ", call.ServiceMethod)
-			//fmt.Println("RESPONSE TURNS", res, "REPLY TURNS", call.Reply)
-
-			fmt.Println("Generating PGM")
-			sendWriteCommand(p, c, res.Turn, res.World)
-			fmt.Println("Generated PGM")
-		case 'q':
-			fmt.Println("Closing the controller client program")
-			//leave the server running
-			finishServer(client)
-			return
-		case 'k':
-			//request closure of server through stubs package
-			fmt.Println("Closing all components of the distributed system")
-			finishServer(client)
-			killServer <- true
-			return
-		case 'p':
-			//request pausing of aws node through stubs package
-			//then print the current turn
-			//once p is pressed again resume processing through requesting from stubs
-			if(!isPaused){
-				donePause := make(chan *rpc.Call, 1)
-				pauseRes := new(stubs.PauseResponse)
-				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: true}, pauseRes, donePause)
-				<-doPause.Done
-				isPaused = true
-				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Paused}
-			}else{
-				donePause := make(chan *rpc.Call, 1)
-				pauseRes := new(stubs.PauseResponse)
-				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: false}, pauseRes, donePause)
-				<-doPause.Done
-				isPaused = false
-
-				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Executing}
-			}
-
-		default:
-
-		}
-	}
-}
+//func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, killServer chan<- bool) {
+//	isPaused := false
+//	for {
+//		k := <-keyPresses
+//		switch k {
+//		case 's':
+//			//request current state through stubs package
+//			//write the pgm out
+//			req := stubs.EmptyRequest{}
+//			res := new(stubs.Response)
+//
+//			remoteDone := make(chan *rpc.Call, 1)
+//			call := client.Go(stubs.PollWorldHandler, req, res, remoteDone)
+//			<-call.Done
+//			//fmt.Println("CALL FINSIHED FROM KEYPRESSER ", call.ServiceMethod)
+//			//fmt.Println("RESPONSE TURNS", res, "REPLY TURNS", call.Reply)
+//
+//			fmt.Println("Generating PGM")
+//			sendWriteCommand(p, c, res.Turn, res.World)
+//			fmt.Println("Generated PGM")
+//		case 'q':
+//			fmt.Println("Closing the controller client program")
+//			//leave the server running
+//			finishServer(client)
+//			return
+//		case 'k':
+//			//request closure of server through stubs package
+//			fmt.Println("Closing all components of the distributed system")
+//			finishServer(client)
+//			killServer <- true
+//			return
+//		case 'p':
+//			//request pausing of aws node through stubs package
+//			//then print the current turn
+//			//once p is pressed again resume processing through requesting from stubs
+//			if(!isPaused){
+//				donePause := make(chan *rpc.Call, 1)
+//				pauseRes := new(stubs.PauseResponse)
+//				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: true}, pauseRes, donePause)
+//				<-doPause.Done
+//				isPaused = true
+//				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Paused}
+//			}else{
+//				donePause := make(chan *rpc.Call, 1)
+//				pauseRes := new(stubs.PauseResponse)
+//				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: false}, pauseRes, donePause)
+//				<-doPause.Done
+//				isPaused = false
+//
+//				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Executing}
+//			}
+//
+//		default:
+//
+//		}
+//	}
+//}
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client) {
@@ -190,9 +190,9 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	//var alive []util.Cell
 	//var turns int
 
-	params := Params{Turns: p.Turns, Threads: p.Threads, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight}
+	params := stubs.Params{Turns: p.Turns, Threads: p.Threads, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight}
 
-	brokerReq := stubs.NewClientRequest{World: world, stubs.Params: params}
+	brokerReq := stubs.NewClientRequest{World: world, Params: params}
 	brokerRes := new(stubs.NewClientResponse)
 
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)

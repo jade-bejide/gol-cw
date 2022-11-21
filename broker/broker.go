@@ -134,7 +134,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		worker := workers[workerId]
 		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
 
-		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, stubs.Params: b.Params}
+		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params}
 		worker.Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
 	}
 
