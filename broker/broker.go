@@ -1,7 +1,8 @@
-package gol
+package main
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
@@ -133,7 +134,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		worker := workers[workerId]
 		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
 
-		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params}
+		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, stubs.Params: b.Params}
 		worker.Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
 	}
 
@@ -176,7 +177,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		b.alternateWorld()
 		//reconstruct the world to go again
 	}
-	//res.World = b.World
+	res.World = *b.NextWorldPtr
 
 	//close the workers after we're finished
 	for _, worker := range workers {
@@ -185,17 +186,19 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	return
 }
+
 func main() {
-	pAddr := flag.String("port", "8030", "Port to listen on")
+	pAddr := flag.String("port", "8031", "Port to listen on")
 	flag.Parse()
 
 	workers := make([]Worker, 3)
-	workers[0] = Worker{Ip: "ip1"}
-	workers[1] = Worker{Ip: "ip2"}
-	workers[2] = Worker{Ip: "ip3"}
+	workers[0] = Worker{Ip: "localhost:8032"}
+	//workers[1] = Worker{Ip: "localhost:8033"}
+	//workers[2] = Worker{Ip: "localhost:8034"}
 
 	rpc.Register(&Broker{Workers: workers, IsCurrentA: true})
 	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
+	fmt.Println("Listening on ", *pAddr)
 
 	handleError(err)
 	defer listener.Close()

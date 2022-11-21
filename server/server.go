@@ -199,10 +199,10 @@ func (g *Gol) setID(id int){
 func (g *Gol) setStrip() (err error){ //depends entirely on slice, this means it can return errors
 	g.Mut.Lock(); defer g.Mut.Unlock()
 	if g.Slice.To == 0 && g.Slice.From == 0 {
-		return err("Slice is nil")
+		fmt.Println("Slice is nil")
 	}
 	if g.Params.ImageWidth == 0 {
-		return err("Params is nil")
+		fmt.Println("Params is nil")
 	}
 
 	subStrip := make([][]uint8, g.Slice.To - g.Slice.From)

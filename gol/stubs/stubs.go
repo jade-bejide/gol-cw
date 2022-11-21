@@ -70,7 +70,7 @@ type PauseResponse struct {
     Turns int
 }
 
-var ClientHanlder = "Broker.AcceptClient"
+var ClientHandler = "Broker.AcceptClient"
 type NewClientRequest struct {
 	World [][]byte
 	Params Params

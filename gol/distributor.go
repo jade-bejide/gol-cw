@@ -175,47 +175,58 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	}
 
 	//doneTakeTurns  := make(chan bool)
-	killServer := make(chan bool, 1)
-	go handleKeyPresses(p, c, client, keyPresses, killServer)
+	//killServer := make(chan bool, 1)
+	//go handleKeyPresses(p, c, client, keyPresses, killServer)
+	//
+    //req := stubs.Request{World: world, Params: stubs.Params(p)}
+    //res := new(stubs.Response)
+	//
+	//done := make(chan bool)
+	//go ticks(c, client, done)
+	//
+	//remoteDone := make(chan *rpc.Call, 1)
+    //call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
 
-    req := stubs.Request{World: world, Params: stubs.Params(p)}
-    res := new(stubs.Response)
+	//var alive []util.Cell
+	//var turns int
 
-	done := make(chan bool)
-	go ticks(c, client, done)
+	params := Params{Turns: p.Turns, Threads: p.Threads, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight}
 
-	remoteDone := make(chan *rpc.Call, 1)
-    call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
+	brokerReq := stubs.NewClientRequest{World: world, stubs.Params: params}
+	brokerRes := new(stubs.NewClientResponse)
 
-	var alive []util.Cell
-	var turns int
+	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
+
+	for _, row := range brokerRes.World {
+		fmt.Println(row)
+	}
 	//var emptyReq stubs.EmptyRequest
 	//var worldRes *stubs.Response
 
-	<-call.Done
-	world = res.World
-	alive = res.Alive
-	turns = res.Turn
-	select {
-		case <-killServer:
-			client.Go(stubs.KillHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse), nil)
-		default:
-	}
+	//<-call.Done
+	//world = res.World
+	//alive = res.Alive
+	//turns = res.Turn
+	//select {
+	//	case <-killServer:
+	//		client.Go(stubs.KillHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse), nil)
+	//	default:
+	//}
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
-	final := FinalTurnComplete{CompletedTurns: turns, Alive: alive}
+	final := FinalTurnComplete{CompletedTurns: 0, Alive: make([]util.Cell, 0)}
 
 	c.events <- final //sending event down events channel
-
-	sendWriteCommand(p, c, turns, world)
+	//
+	//sendWriteCommand(p, c, turns, world)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 
-	c.events <- StateChange{turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
-
-	done <- true
+	//c.events <- StateChange{turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
+	//
+	//done <- true
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }
