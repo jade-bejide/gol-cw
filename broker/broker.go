@@ -115,6 +115,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
 	*b.NextWorldPtr = req.World // to be overwritten
 	b.Params = req.Params
+	b.Threads = req.Threads
 
 	//send work to the gol workers
 	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)

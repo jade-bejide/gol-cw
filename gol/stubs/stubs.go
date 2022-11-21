@@ -41,7 +41,6 @@ type Response struct {
 	Alive []util.Cell //alive cells to report to distributor events
 }
 
-
 var AliveHandler = "Gol.ReportAlive"
 //EmptyRequest
 type AliveResponse struct {
@@ -74,6 +73,7 @@ var ClientHandler = "Broker.AcceptClient"
 type NewClientRequest struct {
 	World [][]byte
 	Params Params
+	Threads int
 }
 type NewClientResponse struct {
 	World [][]byte
