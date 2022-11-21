@@ -17,6 +17,7 @@ type Slice struct {
 type EmptyRequest struct {}
 type EmptyResponse struct{}
 
+
 var SetupHandler = "Gol.Setup"
 type SetupRequest struct {
 	ID int
@@ -64,17 +65,16 @@ var PauseHandler = "Gol.PauseGol"
 type PauseRequest struct {
 	Pause bool
 }
-
 type PauseResponse struct {
     World [][]byte
     Turns int
 }
 
+var ClientHanlder = "Broker.AcceptClient"
 type NewClientRequest struct {
 	World [][]byte
 	Params Params
 }
-
 type NewClientResponse struct {
 	World [][]byte
 }

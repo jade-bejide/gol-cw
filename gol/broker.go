@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/rpc"
 	"sync"
+	"uk.ac.bris.cs/gameoflife/gol/stubs"
 )
 
 func spreadWorkload(h int, threads int) []int {
@@ -70,7 +71,7 @@ func takeWorkers(b *Broker) []Worker {
 
 	totalworkers := 0
 	for _, worker := range b.Workers {
-		worker.Lock.lock()
+		worker.Lock.Lock()
 		if !worker.Working {
 			workers = append(workers, worker)
 			worker.Working = true
@@ -140,7 +141,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 
 
-	out := make(chan *rpc.Call)
+	out := make(chan *stubs.Response)
 
 	for i := 0; i < b.Turns; i++ {
 		turnResponses := make([]stubs.Response, noWorkers)
@@ -153,14 +154,14 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			go func(){
 				turnRes := new(stubs.Response)
 				worker.Connection.Call(stubs.TurnHandler, turnReq, turnRes)
-				out <- *turnRes
+				out <- turnRes
 			}()
 		}
 
 		//gather the work piecewise
 		for worker := 0; worker < b.Threads; worker++ {
 			turnRes := <-out
-			turnResponses[res.ID] = turnRes
+			turnResponses[turnRes.ID] = *turnRes
 		}
 
 		rowNum := 0
