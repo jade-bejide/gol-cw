@@ -115,11 +115,11 @@ func calculateNextState(g *Gol, p stubs.Params, /*c distributorChannels, */world
 //	return
 //}
 
-func calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
+func (g *Gol) calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	var cells []util.Cell
 
 	for x := 0; x < p.ImageWidth; x++{
-		for y := 0; y < p.ImageHeight; y++ {
+		for y := g.Slice.From; y < g.Slice.To; y++ {
 			if isAlive(x, y, world) {
 				c := util.Cell{x, y}
 				cells = append(cells, c)
@@ -223,6 +223,7 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	g.setID(res.ID)
 	g.setSlice(req.Slice)
 	g.setParams(req.Params)
+	g.setWorld(req.World)
 
 	err = g.setStrip()
 	res.Slice = req.Slice
@@ -270,19 +271,19 @@ func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 //}
 
 
-//func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
-//	runningCalls.Add(1); defer runningCalls.Done()
-//
-//	g.WorldMut.Lock()
-//	g.TurnMut.Lock()
-//	res.Alive = len(calculateAliveCells(g.Params, g.World))
-//	res.OnTurn = g.Turn
-//	fmt.Println(res.Alive, res.OnTurn)
-//	g.TurnMut.Unlock()
-//	g.WorldMut.Unlock()
-//
-//	return
-//}
+func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
+	runningCalls.Add(1); defer runningCalls.Done()
+
+	g.WorldMut.Lock()
+	g.TurnMut.Lock()
+	res.Alive = len(calculateAliveCells(g.Params, g.World))
+	res.OnTurn = g.Turn
+	fmt.Println(res.Alive, res.OnTurn)
+	g.TurnMut.Unlock()
+	g.WorldMut.Unlock()
+
+	return
+}
 
 //func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
 //	runningCalls.Add(1); defer runningCalls.Done()

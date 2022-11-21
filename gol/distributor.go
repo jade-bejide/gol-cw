@@ -7,7 +7,7 @@ import (
 	"time"
 	_ "time"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
-	"uk.ac.bris.cs/gameoflife/util"
+	//"uk.ac.bris.cs/gameoflife/util"
 )
 
 type distributorChannels struct {
@@ -197,9 +197,9 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
 
-	for _, row := range brokerRes.World {
-		fmt.Println(row)
-	}
+	//for _, row := range brokerRes.World {
+	//	fmt.Println(row)
+	//}
 	//var emptyReq stubs.EmptyRequest
 	//var worldRes *stubs.Response
 
@@ -214,11 +214,11 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	//}
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
-	final := FinalTurnComplete{CompletedTurns: 0, Alive: make([]util.Cell, 0)}
+	final := FinalTurnComplete{CompletedTurns: brokerRes.Turns, Alive: brokerRes.Alive}
 
 	c.events <- final //sending event down events channel
 	//
-	//sendWriteCommand(p, c, turns, world)
+	sendWriteCommand(p, c, brokerRes.Turns, brokerRes.World)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle

@@ -23,6 +23,7 @@ type SetupRequest struct {
 	ID int
 	Slice Slice
 	Params Params
+	World [][]byte
 }
 type SetupResponse struct {
 	ID int
@@ -76,5 +77,7 @@ type NewClientRequest struct {
 }
 type NewClientResponse struct {
 	World [][]byte
+	Turns int
+	Alive []util.Cell
 }
 

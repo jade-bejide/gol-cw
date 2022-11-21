@@ -7,6 +7,7 @@ import (
 	"net/rpc"
 	"sync"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
+	"uk.ac.bris.cs/gameoflife/util"
 )
 
 func spreadWorkload(h int, threads int) []int {
@@ -54,6 +55,7 @@ type Broker struct {
 	Turns int
 	Workers []Worker //have 16 workers by default, as this is the max size given in tests
 	Params stubs.Params
+	Alive []util.Cell
 }
 
 func handleError(err error) {
@@ -105,6 +107,14 @@ func (b *Broker) getNextWorld() [][]byte{
 	return *b.CurrentWorldPtr
 }
 
+func (b *Broker) getAliveCells() {
+	for _, worker := range b.Workers {
+		aliveRes := new(stubs.AliveResponse)
+		worker.Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
+		b.Alive = append(b.Alive, aliveRes.Alive...)
+	}
+}
+
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	//threads
 	//world
@@ -132,13 +142,11 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	}
 
-	fmt.Println(workers)
-
 	for workerId := 0; workerId < len(workers); workerId++ {
 		worker := workers[workerId]
 		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
 
-		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params}
+		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params, World: req.World}
 		err = worker.Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
 
 		handleError(err)
@@ -150,8 +158,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	out := make(chan *stubs.Response)
 
-	fmt.Println(b.Turns)
-
+	b.getAliveCells()
 	for i := 0; i < b.Turns; i++ {
 		turnResponses := make([]stubs.Response, noWorkers)
 
@@ -173,6 +180,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			turnResponses[turnRes.ID] = *turnRes
 		}
 
+		b.Alive = make([]util.Cell, 0)
 		rowNum := 0
 		for _, response := range turnResponses{
 			strip := response.Strip
@@ -180,17 +188,27 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 				(*b.NextWorldPtr)[rowNum] = row
 				rowNum++
 			}
+
 		}
 
 		b.alternateWorld()
+		res.Turns++
 		//reconstruct the world to go again
+
+		b.getAliveCells()
 	}
-	res.World = *b.NextWorldPtr
+	res.World = req.World
+
+
 
 	//close the workers after we're finished
 	for _, worker := range workers {
 		worker.Connection.Close()
 	}
+
+	res.Alive = b.Alive
+
+	fmt.Println(b.Turns, len(b.Alive))
 
 	return
 }
