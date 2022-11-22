@@ -118,8 +118,9 @@ func calculateNextState(g *Gol, p stubs.Params, /*c distributorChannels, */world
 func (g *Gol) calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	var cells []util.Cell
 
+	fmt.Println(g.Slice.From, g.Slice.To)
 	for x := 0; x < p.ImageWidth; x++{
-		for y := 0; y < p.ImageHeight; y++ {
+		for y := g.Slice.From; y < g.Slice.To; y++ {
 			if isAlive(x, y, world) {
 				c := util.Cell{x, y}
 				cells = append(cells, c)
@@ -133,8 +134,9 @@ func (g *Gol) calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 func (g *Gol) aliveStrip() []util.Cell {
 	var cells []util.Cell
 
+	height := g.Slice.To - g.Slice.From
 	for x := 0; x < g.Params.ImageWidth; x++ {
-		for y := 0; y < len(g.Strip[0]); y++ {
+		for y := 0; y < height; y++ {
 			if isAlive(x, y, g.Strip) {
 				c := util.Cell{x, y}
 				cells = append(cells, c)
@@ -264,7 +266,7 @@ func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 	res.Strip = g.Strip
 	res.Slice = g.Slice
 	res.Turn = g.Turn
-	res.Alive = g.calculateAliveCells(g.Params, g.Strip)
+	res.Alive = g.aliveStrip()
 
 	g.Mut.Unlock()
 

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"sync"
+	"strconv"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -111,10 +112,18 @@ func (b *Broker) getNextWorld() [][]byte{
 
 func (b *Broker) getAliveCells(workers []Worker) {
 	//fmt.Println(b.Workers)
+	b.Alive = make([]util.Cell, 0)
 	for _, worker := range workers {
 		aliveRes := new(stubs.AliveResponse)
 		worker.Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
 		b.Alive = append(b.Alive, aliveRes.Alive...)
+	}
+}
+
+func (b *Broker) setUpWorkers() {
+	b.Workers = make([]Worker, b.Threads)
+	for i := 0; i < b.Threads; i++ {
+		b.Workers[i].Ip = "localhost:"+strconv.Itoa(8032+i)
 	}
 }
 
@@ -132,6 +141,9 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	b.Params = req.Params
 	b.Threads = req.Params.Threads
+
+	b.setUpWorkers()
+	fmt.Println(b.Workers)
 
 	b.TurnsMut.Lock()
 	b.Turns = req.Params.Turns
@@ -172,7 +184,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	if b.Params.Turns == 0 {
 
 		b.getAliveCells(workers)
-		fmt.Println(b.Params)
+		fmt.Println(b.Params, len(req.World))
 		res.Alive = b.Alive
 		res.Turns = b.Turns
 		res.World = req.World
@@ -249,16 +261,15 @@ func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (
 	return
 }
 
+
+
 func main() {
 	pAddr := flag.String("port", "8031", "Port to listen on")
 	flag.Parse()
 
-	workers := make([]Worker, 1 )
-	workers[0] = Worker{Ip: "localhost:8032"}
-	//workers[1] = Worker{Ip: "localhost:8033"}
-	//workers[2] = Worker{Ip: "localhost:8034"}
 
-	rpc.Register(&Broker{Workers: workers, IsCurrentA: true})
+
+	rpc.Register(&Broker{IsCurrentA: true})
 	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
 	fmt.Println("Listening on ", *pAddr)
 
