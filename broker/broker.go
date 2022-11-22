@@ -152,6 +152,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	//send work to the gol workers
 	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
 	workers := takeWorkers(b)
+	// workers := b.Workers
 
 	if len(workers) == 0 { return } //let client know that there are no workers available
 
@@ -179,30 +180,30 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 
 
-	out := make(chan *stubs.Response)
+	out := make(chan *stubs.Response, b.Threads)
 
 	if b.Params.Turns == 0 {
 
 		b.getAliveCells(workers)
-		fmt.Println(b.Params, len(req.World))
 		res.Alive = b.Alive
 		res.Turns = b.Turns
 		res.World = req.World
 		return
 	}
-
+	fmt.Println(workers)
 	i := 0
 	for i < b.Turns {
 		turnResponses := make([]stubs.Response, noWorkers)
-
 		//send a turn request to each worker selected
-		for _, worker := range workers {
+		for workerId := 0; workerId < len(workers); workerId++ {
+			worker := workers[workerId]
 			turnReq := stubs.Request{World: b.getCurrentWorld()}
-
 			//receive response when ready (in any order) via the out channel
 			go func(){
 				turnRes := new(stubs.Response)
+				// done := make(chan *rpc.Call, 1)
 				worker.Connection.Call(stubs.TurnHandler, turnReq, turnRes)
+				// <-done
 				out <- turnRes
 			}()
 		}
@@ -224,7 +225,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			}
 
 		}
-		//b.alternateWorld()
+		// b.alternateWorld()
 		res.Turns++
 		//reconstruct the world to go again
 

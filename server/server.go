@@ -118,7 +118,6 @@ func calculateNextState(g *Gol, p stubs.Params, /*c distributorChannels, */world
 func (g *Gol) calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	var cells []util.Cell
 
-	fmt.Println(g.Slice.From, g.Slice.To)
 	for x := 0; x < p.ImageWidth; x++{
 		for y := g.Slice.From; y < g.Slice.To; y++ {
 			if isAlive(x, y, world) {
@@ -237,13 +236,15 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	fmt.Println("Setting up")
 
 	resetGol(g)
-	g.setID(res.ID)
+	g.setID(req.ID)
+	fmt.Println(g.ID, req.ID)
 	g.setSlice(req.Slice)
 	g.setParams(req.Params)
 	g.setWorld(req.World)
-
 	err = g.setStrip()
 	res.Slice = req.Slice
+
+	fmt.Println(g.ID, g.Params, g.Slice)
 
 	return err
 }
@@ -263,6 +264,7 @@ func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 
 	g.Mut.Lock()
 	res.ID = g.ID
+	fmt.Println("Returning", res.ID)
 	res.Strip = g.Strip
 	res.Slice = g.Slice
 	res.Turn = g.Turn
