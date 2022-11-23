@@ -59,6 +59,9 @@ type Broker struct {
 	Workers []Worker //have 16 workers by default, as this is the max size given in tests
 	Params stubs.Params
 	Alive []util.Cell
+	AliveMut sync.Mutex
+	AliveTurn int
+	AliveTurnMut sync.Mutex
 }
 
 func handleError(err error) {
@@ -110,19 +113,23 @@ func (b *Broker) getNextWorld() [][]byte{
 	return *b.CurrentWorldPtr
 }
 
-func (b *Broker) getAliveCells(workers []Worker) int {
+func (b *Broker) getAliveCells(workers []Worker) []util.Cell { //mutex locks aren't helpful here when seting global variabls of broker
 	//fmt.Println(b.Workers)
-	b.Alive = make([]util.Cell, 0)
-	onTurn := 0
-	for _, worker := range workers {
-		aliveRes := new(stubs.AliveResponse)
-		worker.Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
-		b.Alive = append(b.Alive, aliveRes.Alive...)
+	fmt.Println("Here")
+	b.AliveTurnMut.Lock(); defer b.AliveTurnMut.Unlock()
+	alive  := make([]util.Cell, 0)
 
-		onTurn = aliveRes.OnTurn
+	for workerId := 0; workerId < b.Threads; workerId++  {
+		aliveRes := new(stubs.AliveResponse)
+		workers[workerId].Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
+		alive = append(alive, aliveRes.Alive...)
+
+		b.AliveTurn = aliveRes.OnTurn
 	}
 
-	return onTurn
+	fmt.Println("There")
+
+	return alive
 }
 
 func (b *Broker) setUpWorkers() {
@@ -137,7 +144,6 @@ func (b *Broker) setUpWorkers() {
 		b.Workers[i].Connection = client
 	}
 
-	fmt.Println("WORKERS", b.Workers)
 }
 
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
@@ -156,7 +162,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	b.Threads = req.Params.Threads
 
 	b.setUpWorkers()
-	fmt.Println(b.Workers)
 
 	b.TurnsMut.Lock()
 	b.Turns = req.Params.Turns
@@ -189,8 +194,8 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	if b.Params.Turns == 0 {
 
-		b.getAliveCells(workers)
-		res.Alive = b.Alive
+		
+		res.Alive = b.getAliveCells(workers)
 		res.Turns = b.Turns
 		res.World = req.World
 		return
@@ -219,7 +224,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			turnResponses[turnRes.ID] = *turnRes
 		}
 
-		b.Alive = make([]util.Cell, 0)
+
 		rowNum := 0
 		b.WorldsMut.Lock()
 		for _, response := range turnResponses {
@@ -234,7 +239,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		res.Turns++
 		//reconstruct the world to go again
 
-		b.getAliveCells(workers)
+		// b.getAliveCells(workers)
 		b.WorldsMut.Unlock()
 		b.TurnsMut.Lock()
 		i++
@@ -250,8 +255,9 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		worker.Connection.Close()
 	}
 
-	res.Alive = b.Alive
-
+	// b.AliveMut.Lock()
+	res.Alive = b.getAliveCells(workers)
+	// b.AliveMut.Unlock()
 
 	return
 }
@@ -260,9 +266,13 @@ func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (
 	fmt.Println("Reporting Alive")
 	// b.WorldsMut.Lock()
 	// b.TurnsMut.Lock()
-	alive := b.getAliveCells(b.Workers)
-	res.Alive = b.Alive
-	res.OnTurn = alive
+	
+	
+	res.Alive = b.getAliveCells(b.Workers)
+	b.AliveTurnMut.Lock()
+	res.OnTurn = b.AliveTurn
+	b.AliveTurnMut.Unlock()
+	
 	// b.TurnsMut.Lock()
 	// b.WorldsMut.Unlock()
 

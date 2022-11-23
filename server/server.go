@@ -132,10 +132,11 @@ func (g *Gol) calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 
 func (g *Gol) aliveStrip() []util.Cell {
 	var cells []util.Cell
-
+	
 	height := g.Slice.To - g.Slice.From
 	for x := 0; x < g.Params.ImageWidth; x++ {
 		for y := 0; y < height; y++ {
+			// fmt.Println(y, "+", g.Slice.From,  "=", y+g.Slice.From)
 			if isAlive(x, y, g.Strip) {
 				c := util.Cell{x, y+g.Slice.From}
 				cells = append(cells, c)
@@ -264,7 +265,6 @@ func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 
 	g.Mut.Lock()
 	res.ID = g.ID
-	fmt.Println("Returning", res.ID)
 	res.Strip = g.Strip
 	res.Slice = g.Slice
 	res.Turn = g.Turn
