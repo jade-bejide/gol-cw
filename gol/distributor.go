@@ -377,7 +377,6 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	}
 
 	splits := spreadWorkload(len(world), p.Threads)
-	fmt.Println(splits)
 
 	// TODO: Execute all turns of the Game of Life.
 

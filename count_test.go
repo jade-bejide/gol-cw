@@ -88,7 +88,7 @@ func readAliveCounts(width, height int) map[int]int {
 		if i == 0 {
 			continue
 		}
-		fmt.Println("I am running")
+
 		completedTurns, err := strconv.Atoi(row[0])
 		util.Check(err)
 		aliveCount, err := strconv.Atoi(row[1])
