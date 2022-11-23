@@ -14,7 +14,7 @@ func BenchmarkGolWorkers(b *testing.B) {
 	var params gol.Params
 	params.ImageWidth = 512
 	params.ImageHeight = 512
-	params.Turns = 10
+	params.Turns = 1000
 
 
 	////keyPresses := make(chan rune, 10)
