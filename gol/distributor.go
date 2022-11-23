@@ -317,6 +317,10 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 		for x := 0; x < p.ImageWidth; x++ {
 			pixel := <-c.ioInput //gets image in with the io.goroutine
 			world[y][x] = pixel
+			if pixel == 255 {
+				cell := util.Cell{x, y}
+				c.events <- CellFlipped{CompletedTurns: 0, Cell: cell}
+			}
 		}
 	}
 
