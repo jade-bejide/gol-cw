@@ -14,7 +14,7 @@ func BenchmarkGolWorkers(b *testing.B) {
 	var params gol.Params
 	params.ImageWidth = 512
 	params.ImageHeight = 512
-	params.Turns = 1000000
+	params.Turns = 10
 
 
 	////keyPresses := make(chan rune, 10)
@@ -25,14 +25,14 @@ func BenchmarkGolWorkers(b *testing.B) {
 	//benchmark thread by thread
 	for threads := 1; threads <= 16; threads++ {
 		b.Run(fmt.Sprintf("%d_workers", threads), func(b *testing.B) {
-			b.StartTimer()
 			params.Threads = threads
+			for i := 0; i < b.N; i++ {
+				events := make(chan gol.Event, 1000)
+				go gol.Run(params, events, nil)
+				for range events {
 
-			events := make(chan gol.Event, 1000)
-
-			go gol.Run(params, events, nil)
-			b.StartTimer()
-
+				}
+			}
 		})
 	}
 
