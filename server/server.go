@@ -137,7 +137,7 @@ func (g *Gol) aliveStrip() []util.Cell {
 	for x := 0; x < g.Params.ImageWidth; x++ {
 		for y := 0; y < height; y++ {
 			if isAlive(x, y, g.Strip) {
-				c := util.Cell{x, y}
+				c := util.Cell{x, y+g.Slice.From}
 				cells = append(cells, c)
 			}
 		}
