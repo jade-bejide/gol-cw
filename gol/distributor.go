@@ -24,11 +24,6 @@ Distributed part (2)
 //constants
 const aliveCellsPollDelay = 2 * time.Second
 
-//type Boolean struct {
-//	B bool
-//
-//}
-
 type Turns struct { //pass-by-ref integer
 	T   int
 	mut sync.Mutex
@@ -42,7 +37,7 @@ type SharedWorld struct { //pass-by-ref world
 type Gol struct {
 	Turns int
 	TurnsMut sync.Mutex
-	WorldA [][]uint8
+	WorldA [][]uint8 //two alternating worlds to avoid continued memory allocations
 	WorldB [][]uint8
 	World *[][]uint8
 	Next *[][]uint8
@@ -54,7 +49,7 @@ type Worker struct {
 	ID int
 	TopY int
 	EndY int
-	WorldStrip [][]uint8
+	WorldStrip [][]uint8 //a strip that belongs to a worker, it will write its output here to avoid races
 }
 
 //swap works
@@ -203,12 +198,8 @@ type WorldBlock struct {
 }
 
 func (w *Worker) run(p Params, c distributorChannels, world func(x, y int) uint8, wg *sync.WaitGroup, turn int) {
-	//do the things
-	//fmt.Printf("WORKER %d: <%d> -> <%d>\n", w.ID, w.TopY, w.EndY)
 	w.calculateNextState(p, c, world, w.WorldStrip, turn)
 	defer wg.Done()
-	//fmt.Println("Turn", g.Turns, len(calculateAliveCells(p, *g.Next)))
-	//outCh <- WorldBlock{Index: workerId, Data: nextWorld}
 }
 
 //completes one turn of gol
@@ -216,9 +207,6 @@ func (w *Worker) run(p Params, c distributorChannels, world func(x, y int) uint8
 func (w *Worker) calculateNextState(p Params, c distributorChannels, world func(x, y int) uint8, strip [][]uint8, turn int) {
 	x := 0
 	height := w.EndY - w.TopY
-	//immutableWorld := makeImmutableMatrix(*g.World)
-
-	//aliveCells := calculateAliveCells(p, world)
 
 	for x < p.ImageWidth {
 		j := w.TopY
@@ -243,7 +231,6 @@ func (w *Worker) calculateNextState(p Params, c distributorChannels, world func(
 		x += 1
 	}
 
-	//fmt.Printf("calculateNextState makes world go from %d to %d\n", len(aliveCells) , len(calculateAliveCells(p, world)))
 }
 
 func spreadWorkload(h int, threads int) []int {
@@ -392,12 +379,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	splits := spreadWorkload(len(world), p.Threads)
 	fmt.Println(splits)
 
-	//outCh := make(chan WorldBlock)
 	// TODO: Execute all turns of the Game of Life.
-
-	//ticker tools
-	//sharedTurns := Turns{0, sync.Mutex{}}
-	//sharedWorld := SharedWorld{world, sync.Mutex{}}
 
 	g := newGol(p.ImageWidth, p.ImageHeight, p.Threads, splits, world)
 	workers := newWorkers(p, splits)
@@ -408,19 +390,16 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	go g.ticks(p, c.events, aliveCellsPollDelay)
 	go g.handleSDL(p, c, keyPresses, &pauseLock)
 
-	//outCh := make(chan )
-
 	g.TurnsMut.Lock()
 	for g.Turns = 0; g.Turns < p.Turns; g.Turns++ {
-		//pauseLock.Lock()
 		g.TurnsMut.Unlock()
 		g.WorkGroup.Add(p.Threads)
 		for i := 0; i < p.Threads; i++ {
 			go workers[i].run(p, c, makeImmutableMatrix(*g.World), &g.WorkGroup, i)
 		}
 		g.WorkGroup.Wait()
-		//time.Sleep(500 * time.Millisecond)
 
+		g.WorldMut.Lock()
 		for i := 0; i < len(workers); i++{
 			//for each worker we want to put its slice back into the world, we can set the world row by row
 			offset := workers[i].TopY
@@ -428,25 +407,16 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 				for x := 0; x < p.ImageWidth; x++ {
 					(*g.Next)[offset + y][x] = workers[i].WorldStrip[y][x]
 				}
-				//fmt.Println((*g.Next)[offset + y], "<-" ,workers[i].WorldStrip[y])
+
 			}
 		}
-		//fmt.Println()
-		//for i := 0; i < len(*g.Next); i++ {
-		//	fmt.Println((*g.Next)[i])
-		//}
-		//fmt.Printf("TURN %d: <%d> -> <%d>\n", g.Turns, len(calculateAliveCells(p,  makeImmutableMatrix(*g.World))), len(calculateAliveCells(p,  makeImmutableMatrix(*g.Next))))
+		g.WorldMut.Unlock()
 
 		g.TurnsMut.Lock()
 		c.events <- TurnComplete{g.Turns}
 		g.swapWorld(p)
-		//fmt.Printf("TURN %d: <%d> -> <%d>\n", g.Turns, len(calculateAliveCells(p,  makeImmutableMatrix(*g.World))), len(calculateAliveCells(p,  makeImmutableMatrix(*g.Next))))
-		//fmt.Println(g.World == &g.WorldB)
-		//pauseLock.Unlock()
 	}
 	g.TurnsMut.Unlock()
-
-	//workers[0].WorldStrip[15][15] = 255
 
 	aliveCells := calculateAliveCells(p,  makeImmutableMatrix(*g.World))
 	final := FinalTurnComplete{CompletedTurns: g.Turns, Alive: aliveCells}
@@ -463,28 +433,3 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }
-
-
-//nextWorld := make([][][]byte, p.Threads)
-
-//g.WorldMut.Lock()
-//for i := 0; i < p.Threads; i++ {
-//	section := <-outCh
-//	//nextWorld[section.Index] = section.Data
-//	for j := splits[section.Index]; j < splits[section.Index + 1]; j++ { //(re)sets each row
-//		(*g.Next)[j] = section.Data[j]
-//	}
-//	fmt.Printf("collected %d\n", section.Index)
-//}
-//g.WorldMut.Unlock()
-//fmt.Println(g.Next)
-
-//g.WorldMut.Lock()
-//world = make([][]byte, 0)
-//for _, section := range nextWorld {
-//	for _, row := range section {
-//		world = append(world, row)
-//	}
-//}
-//g.World = world
-//g.WorldMut.Unlock()
