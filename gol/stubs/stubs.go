@@ -17,11 +17,13 @@ type Slice struct {
 type EmptyRequest struct {}
 type EmptyResponse struct{}
 
+
 var SetupHandler = "Gol.Setup"
 type SetupRequest struct {
 	ID int
 	Slice Slice
 	Params Params
+	World [][]byte
 }
 type SetupResponse struct {
 	ID int
@@ -40,11 +42,10 @@ type Response struct {
 	Alive []util.Cell //alive cells to report to distributor events
 }
 
-
 var AliveHandler = "Gol.ReportAlive"
 //EmptyRequest
 type AliveResponse struct {
-	Alive int
+	Alive []util.Cell
 	OnTurn int
 }
 
@@ -64,9 +65,19 @@ var PauseHandler = "Gol.PauseGol"
 type PauseRequest struct {
 	Pause bool
 }
-
 type PauseResponse struct {
     World [][]byte
     Turns int
+}
+
+var ClientHandler = "Broker.AcceptClient"
+type NewClientRequest struct {
+	World [][]byte
+	Params Params
+}
+type NewClientResponse struct {
+	World [][]byte
+	Turns int
+	Alive []util.Cell
 }
 
