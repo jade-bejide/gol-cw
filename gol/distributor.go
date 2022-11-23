@@ -50,22 +50,58 @@ type Gol struct {
 	WorkGroup sync.WaitGroup
 }
 
-func (g *Gol) swapWorld() {
+type Worker struct {
+	ID int
+	TopY int
+	EndY int
+	WorldStrip [][]uint8
+}
+
+//swap works
+func (g *Gol) swapWorld(p Params) {
 	g.WorldMut.Lock()
 	if g.World == &g.WorldA {
 		g.World = &g.WorldB
 		g.Next = &g.WorldA
-	}else{
+	}else if g.World == &g.WorldB{
 		g.World = &g.WorldA
 		g.Next = &g.WorldB
 	}
 	g.WorldMut.Unlock()
 }
 
-func newGol(width, height int) Gol{
-	worldA := genWorldBlock(width, height)
-	worldB := genWorldBlock(width, height)
-	return Gol{Turns: 0, TurnsMut: sync.Mutex{}, WorldA: worldA, WorldB: worldB, World: &worldA, Next: &worldB, WorldMut: sync.Mutex{}};
+func newGol(width, height, threads int, splits []int, initialWorld [][]uint8) *Gol{
+
+	g := Gol{
+		Turns: 0,
+		TurnsMut: sync.Mutex{},
+		WorldA: initialWorld,
+		WorldB: genWorldBlock(width, height),
+		World: nil,
+		Next: nil,
+		WorldMut: sync.Mutex{},
+	};
+
+	g.World = &g.WorldA //these swap each turn
+	g.Next  = &g.WorldB
+
+	return &g
+}
+
+func newWorkers(p Params, splits []int) []Worker {
+	var workers []Worker
+
+	for i := 0; i < p.Threads; i++ {
+		strip := genWorldBlock(splits[i+1] - splits[i], p.ImageWidth)
+		workers = append(workers, Worker{
+			ID: i,
+			TopY: splits[i],
+			EndY: splits[i+1],
+			WorldStrip: strip, //a strip for each worker (to write in)
+		})
+	}
+
+	return workers
 }
 
 //returns a closure of a 2d array of uint8s
@@ -76,7 +112,7 @@ func makeImmutableMatrix(m [][]uint8) func(x, y int) uint8 {
 }
 
 //counts the number of alive neighbours of a given cell
-func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
+func countLiveNeighbours(p Params, x int, y int, world func(x, y int) uint8) int {
 	liveNeighbours := 0
 
 	w := p.ImageWidth - 1
@@ -100,28 +136,28 @@ func countLiveNeighbours(p Params, x int, y int, world [][]byte) int {
 		d = h
 	}
 
-	if world[u][x] == 255 {
+	if world(x, u) == 255 {
 		liveNeighbours += 1
 	}
-	if world[d][x] == 255 {
+	if world(x, d) == 255 {
 		liveNeighbours += 1
 	}
-	if world[u][l] == 255 {
+	if world(l, u) == 255 {
 		liveNeighbours += 1
 	}
-	if world[u][r] == 255 {
+	if world(r, u) == 255 {
 		liveNeighbours += 1
 	}
-	if world[d][l] == 255 {
+	if world(l, d) == 255 {
 		liveNeighbours += 1
 	}
-	if world[d][r] == 255 {
+	if world(r, d) == 255 {
 		liveNeighbours += 1
 	}
-	if world[y][l] == 255 {
+	if world(l, y)  == 255 {
 		liveNeighbours += 1
 	}
-	if world[y][r] == 255 {
+	if world(r, y) == 255 {
 		liveNeighbours += 1
 	}
 
@@ -134,8 +170,8 @@ func updateState(isAlive bool, neighbours int) bool {
 }
 
 //checks if a cell is alive
-func isAlive(x int, y int, world [][]byte) bool {
-	return world[y][x] != 0
+func isAlive(x int, y int, world func(x, y int) uint8) bool {
+	return world(x, y) != 0
 }
 
 //makes a deep copy of a previous world state
@@ -166,34 +202,48 @@ type WorldBlock struct {
 	Index int
 }
 
-//completes one turn of gol
-func (g *Gol) calculateNextState(p Params, c distributorChannels, y1 int, y2 int) {
-	x := 0
+func (w *Worker) run(p Params, c distributorChannels, world func(x, y int) uint8, wg *sync.WaitGroup, turn int) {
+	//do the things
+	//fmt.Printf("WORKER %d: <%d> -> <%d>\n", w.ID, w.TopY, w.EndY)
+	w.calculateNextState(p, c, world, w.WorldStrip, turn)
+	defer wg.Done()
+	//fmt.Println("Turn", g.Turns, len(calculateAliveCells(p, *g.Next)))
+	//outCh <- WorldBlock{Index: workerId, Data: nextWorld}
+}
 
-	height := y2 - y1
+//completes one turn of gol
+// 'world' argument is the world we read from, strip is where we put our new data
+func (w *Worker) calculateNextState(p Params, c distributorChannels, world func(x, y int) uint8, strip [][]uint8, turn int) {
+	x := 0
+	height := w.EndY - w.TopY
+	//immutableWorld := makeImmutableMatrix(*g.World)
+
+	//aliveCells := calculateAliveCells(p, world)
 
 	for x < p.ImageWidth {
-		j := y1
+		j := w.TopY
 		for y := 0; y < height; y++ {
-			neighbours := countLiveNeighbours(p, x, j, *g.World) //reading needs no mutex
-			alive := isAlive(x, j, *g.World)
+			neighbours := countLiveNeighbours(p, x, j, world) //reading an immutable world needs no mutex
+			alive := isAlive(x, j, world)
 
 			alive = updateState(alive, neighbours)
 
 			if alive {
-				(*g.Next)[y][x] = 255 //writing needs no mutex
+				strip[y][x] = 255 //writing needs no mutex
 			} else {
-				(*g.Next)[y][x] = 0
+				strip[y][x] = 0
 			}
-			if (*g.World)[j][x] != (*g.Next)[y][x] {
+			if world(x, j) != strip[y][x] {
 				cell := util.Cell{X: x, Y: j}
-				c.events <- CellFlipped{CompletedTurns: g.Turns, Cell: cell}
+				c.events <- CellFlipped{CompletedTurns: turn, Cell: cell}
 			}
 
 			j += 1
 		}
 		x += 1
 	}
+
+	//fmt.Printf("calculateNextState makes world go from %d to %d\n", len(aliveCells) , len(calculateAliveCells(p, world)))
 }
 
 func spreadWorkload(h int, threads int) []int {
@@ -218,15 +268,8 @@ func spreadWorkload(h int, threads int) []int {
 	return splits
 }
 
-func (g *Gol) worker(p Params, c distributorChannels, y1 int, y2 int, workerId int) {
-	//do the things
-	g.calculateNextState(p, c, y1, y2)
-	g.WorkGroup.Done()
-	//outCh <- WorldBlock{Index: workerId, Data: nextWorld}
-}
-
 //traverses the world and takes the coordinates of any alive cells
-func calculateAliveCells(p Params, world [][]byte) []util.Cell {
+func calculateAliveCells(p Params, world func(x, y int) uint8) []util.Cell {
 	x := 0
 	y := 0
 
@@ -258,7 +301,7 @@ func (g *Gol) ticks(p Params, events chan<- Event, pollRate time.Duration) {
 			//critical section, we want to report while calculation is paused
 			g.WorldMut.Lock()
 			g.TurnsMut.Lock()
-			events <- AliveCellsCount{g.Turns, len(calculateAliveCells(p, *g.World))}
+			events <- AliveCellsCount{g.Turns, len(calculateAliveCells(p, makeImmutableMatrix(*g.World)))}
 			g.TurnsMut.Unlock()
 			g.WorldMut.Unlock()
 		}
@@ -271,7 +314,7 @@ func (g *Gol) handleSDL(p Params, c distributorChannels, keyPresses <-chan rune,
 		keyPress := <-keyPresses
 		switch keyPress {
 		case 'p':
-			fmt.Println("P")
+			//fmt.Println("P")
 			if !paused {
 				g.TurnsMut.Lock()
 				c.events <- StateChange{CompletedTurns: g.Turns, NewState: Paused}
@@ -302,7 +345,7 @@ func (g *Gol) handleSDL(p Params, c distributorChannels, keyPresses <-chan rune,
 			c.events <- StateChange{CompletedTurns: g.Turns, NewState: Quitting}
 			g.WorldMut.Lock()
 			sendWriteCommand(p, c, g.Turns, *g.World)
-			c.events <- FinalTurnComplete{CompletedTurns: g.Turns, Alive: calculateAliveCells(p, *g.World)}
+			c.events <- FinalTurnComplete{CompletedTurns: g.Turns, Alive: calculateAliveCells(p, makeImmutableMatrix(*g.World))}
 			g.WorldMut.Unlock()
 			g.TurnsMut.Unlock()
 		default:
@@ -355,7 +398,10 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	//ticker tools
 	//sharedTurns := Turns{0, sync.Mutex{}}
 	//sharedWorld := SharedWorld{world, sync.Mutex{}}
-	g := newGol(p.ImageWidth, p.ImageHeight)
+
+	g := newGol(p.ImageWidth, p.ImageHeight, p.Threads, splits, world)
+	workers := newWorkers(p, splits)
+
 
 	pauseLock := sync.Mutex{}
 	done = make(chan bool)
@@ -365,51 +411,44 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	//outCh := make(chan )
 
 	g.TurnsMut.Lock()
-
 	for g.Turns = 0; g.Turns < p.Turns; g.Turns++ {
 		//pauseLock.Lock()
 		g.TurnsMut.Unlock()
 		g.WorkGroup.Add(p.Threads)
 		for i := 0; i < p.Threads; i++ {
-			go g.worker(p, c, splits[i], splits[i+1], i)
+			go workers[i].run(p, c, makeImmutableMatrix(*g.World), &g.WorkGroup, i)
 		}
 		g.WorkGroup.Wait()
-		fmt.Printf("TURN %d\n", g.Turns)
+		//time.Sleep(500 * time.Millisecond)
 
-		//nextWorld := make([][][]byte, p.Threads)
-
-		//g.WorldMut.Lock()
-		//for i := 0; i < p.Threads; i++ {
-		//	section := <-outCh
-		//	//nextWorld[section.Index] = section.Data
-		//	for j := splits[section.Index]; j < splits[section.Index + 1]; j++ { //(re)sets each row
-		//		(*g.Next)[j] = section.Data[j]
-		//	}
-		//	fmt.Printf("collected %d\n", section.Index)
+		for i := 0; i < len(workers); i++{
+			//for each worker we want to put its slice back into the world, we can set the world row by row
+			offset := workers[i].TopY
+			for y := 0; y < len(workers[i].WorldStrip); y++ { //we must set pixel by pixel, copying through any other means is the same number of operations
+				for x := 0; x < p.ImageWidth; x++ {
+					(*g.Next)[offset + y][x] = workers[i].WorldStrip[y][x]
+				}
+				//fmt.Println((*g.Next)[offset + y], "<-" ,workers[i].WorldStrip[y])
+			}
+		}
+		//fmt.Println()
+		//for i := 0; i < len(*g.Next); i++ {
+		//	fmt.Println((*g.Next)[i])
 		//}
-		//g.WorldMut.Unlock()
-		//fmt.Println(g.Next)
-
-		//g.WorldMut.Lock()
-		//world = make([][]byte, 0)
-		//for _, section := range nextWorld {
-		//	for _, row := range section {
-		//		world = append(world, row)
-		//	}
-		//}
-		//g.World = world
-		//g.WorldMut.Unlock()
+		//fmt.Printf("TURN %d: <%d> -> <%d>\n", g.Turns, len(calculateAliveCells(p,  makeImmutableMatrix(*g.World))), len(calculateAliveCells(p,  makeImmutableMatrix(*g.Next))))
 
 		g.TurnsMut.Lock()
 		c.events <- TurnComplete{g.Turns}
-		g.swapWorld()
+		g.swapWorld(p)
+		//fmt.Printf("TURN %d: <%d> -> <%d>\n", g.Turns, len(calculateAliveCells(p,  makeImmutableMatrix(*g.World))), len(calculateAliveCells(p,  makeImmutableMatrix(*g.Next))))
+		//fmt.Println(g.World == &g.WorldB)
 		//pauseLock.Unlock()
 	}
-
 	g.TurnsMut.Unlock()
-	// TODO: Report the final state using FinalTurnCompleteEvent.
 
-	aliveCells := calculateAliveCells(p, *g.World)
+	//workers[0].WorldStrip[15][15] = 255
+
+	aliveCells := calculateAliveCells(p,  makeImmutableMatrix(*g.World))
 	final := FinalTurnComplete{CompletedTurns: g.Turns, Alive: aliveCells}
 
 	c.events <- final //sending event down events channel
@@ -424,3 +463,28 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }
+
+
+//nextWorld := make([][][]byte, p.Threads)
+
+//g.WorldMut.Lock()
+//for i := 0; i < p.Threads; i++ {
+//	section := <-outCh
+//	//nextWorld[section.Index] = section.Data
+//	for j := splits[section.Index]; j < splits[section.Index + 1]; j++ { //(re)sets each row
+//		(*g.Next)[j] = section.Data[j]
+//	}
+//	fmt.Printf("collected %d\n", section.Index)
+//}
+//g.WorldMut.Unlock()
+//fmt.Println(g.Next)
+
+//g.WorldMut.Lock()
+//world = make([][]byte, 0)
+//for _, section := range nextWorld {
+//	for _, row := range section {
+//		world = append(world, row)
+//	}
+//}
+//g.World = world
+//g.WorldMut.Unlock()
