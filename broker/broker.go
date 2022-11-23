@@ -110,21 +110,34 @@ func (b *Broker) getNextWorld() [][]byte{
 	return *b.CurrentWorldPtr
 }
 
-func (b *Broker) getAliveCells(workers []Worker) {
+func (b *Broker) getAliveCells(workers []Worker) int {
 	//fmt.Println(b.Workers)
 	b.Alive = make([]util.Cell, 0)
+	onTurn := 0
 	for _, worker := range workers {
 		aliveRes := new(stubs.AliveResponse)
 		worker.Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
 		b.Alive = append(b.Alive, aliveRes.Alive...)
+
+		onTurn = aliveRes.OnTurn
 	}
+
+	return onTurn
 }
 
 func (b *Broker) setUpWorkers() {
 	b.Workers = make([]Worker, b.Threads)
 	for i := 0; i < b.Threads; i++ {
 		b.Workers[i].Ip = "localhost:"+strconv.Itoa(8032+i)
+
+		//connect to the worker
+		client, err := rpc.Dial("tcp", b.Workers[i].Ip)
+
+		handleError(err)
+		b.Workers[i].Connection = client
 	}
+
+	fmt.Println("WORKERS", b.Workers)
 }
 
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
@@ -151,19 +164,11 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	//send work to the gol workers
 	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
-	workers := takeWorkers(b)
-	// workers := b.Workers
+	// workers := takeWorkers(b)
+	workers := b.Workers
 
 	if len(workers) == 0 { return } //let client know that there are no workers available
 
-	for workerId := 0; workerId < len(workers); workerId++ {
-		//connect to the worker
-		client, err := rpc.Dial("tcp", workers[workerId].Ip)
-
-		handleError(err)
-		workers[workerId].Connection = client
-
-	}
 
 
 	for workerId := 0; workerId < len(workers); workerId++ {
@@ -252,13 +257,16 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 }
 
 func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
-	b.WorldsMut.Lock()
-	b.TurnsMut.Lock()
+	fmt.Println("Reporting Alive")
+	// b.WorldsMut.Lock()
+	// b.TurnsMut.Lock()
+	alive := b.getAliveCells(b.Workers)
 	res.Alive = b.Alive
-	res.OnTurn = b.Turns
-	b.TurnsMut.Lock()
-	b.WorldsMut.Unlock()
+	res.OnTurn = alive
+	// b.TurnsMut.Lock()
+	// b.WorldsMut.Unlock()
 
+	fmt.Println("Reported Alive")
 	return
 }
 
@@ -269,13 +277,14 @@ func main() {
 	flag.Parse()
 
 
-
-	rpc.Register(&Broker{IsCurrentA: true})
+	broker := Broker{IsCurrentA: true}
+	rpc.Register(&broker)
 	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
 	fmt.Println("Listening on ", *pAddr)
 
 	handleError(err)
 	defer listener.Close()
 	rpc.Accept(listener)
+	broker.setUpWorkers()
 
 }
