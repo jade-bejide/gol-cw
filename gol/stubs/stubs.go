@@ -25,6 +25,16 @@ type SetupRequest struct {
 	Params Params
 	World [][]byte
 }
+
+var HaloSetupHandler = "Gol.HaloSetup"
+type HaloSetupRequest struct {
+	ID int
+	Slice Slice
+	Params Params
+	TopHalo []byte
+	BottomHalo []byte
+}
+
 type SetupResponse struct {
 	ID int
 	Slice Slice //identify yourselves
@@ -34,6 +44,12 @@ var TurnHandler = "Gol.TakeTurn"
 type Request struct {
 	World [][]uint8 //whole world
 }
+
+type HaloRequest struct {
+	TopHalo []uint8
+	BottomHalo []uint8
+}
+
 type Response struct {
 	ID int
 	Strip [][]uint8 //final strip

@@ -127,6 +127,26 @@ func (b *Broker) setUpWorkers() {
 	}
 }
 
+func (b *Broker) getHalos(y1 int, y2 int) ([]byte, []byte) {
+	size := b.Params.ImageHeight
+	var topHalo []byte
+	var bottomHalo []byte
+
+	if y1 == 0 && y2 == size{ 
+		topHalo = b.getCurrentWorld()[size-1]
+		bottomHalo = b.getCurrentWorld()[0]
+	} else if y1 == 0 {
+		topHalo = b.getCurrentWorld()[size-1]
+	} else if y2 == size {
+		bottomHalo = b.getCurrentWorld()[0]
+	} else {
+		topHalo = b.getCurrentWorld()[y1-1]
+		bottomHalo = b.getCurrentWorld()[y2] //y2 isn't exclusive
+	}
+
+	return topHalo, bottomHalo
+}
+
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	//threads
 	//world

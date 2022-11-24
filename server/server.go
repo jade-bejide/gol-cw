@@ -69,6 +69,28 @@ func countLiveNeighbours(p stubs.Params, x int, y int, world [][]byte) int {
 		return liveNeighbours
 	}
 
+func calculateNextStateHalo(g *Gol, p stubs.Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) {
+
+	height := y2 - y1
+
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	for x := 0; x < p.ImageWidth; x++ {
+		//pad one as to ignore the top halo
+		for y := 1; y <= height; y++ {
+			yWorld := y + y1
+			neighbours := countLiveNeighbours(p, x, yWorld, world)
+			alive := isAlive(x, yWorld, world)
+			alive = updateState(alive, neighbours)
+
+			if alive {
+				g.Strip[y][x] = 255
+			} else {
+				g.Strip[y][x] = 0
+			}
+		}
+	}
+}
+
 func calculateNextState(g *Gol, p stubs.Params, /*c distributorChannels, */world [][]byte, y1 int, y2 int, turn int) {
 
 	height := y2 - y1
@@ -177,9 +199,14 @@ type Gol struct {
 	World [][]uint8
 	Strip [][]uint8
 
+	TopHalo []uint8
+	BottomHalo []uint8
+
 	Turn int
 	Done chan bool
 }
+
+
 
 //internal methods (safe setters)
 func (g *Gol) setParams(p stubs.Params){
@@ -215,10 +242,10 @@ func (g *Gol) setID(id int){
 func (g *Gol) setStrip() (err error){ //depends entirely on slice, this means it can return errors
 	g.Mut.Lock(); defer g.Mut.Unlock()
 	if g.Slice.To == 0 && g.Slice.From == 0 {
-		fmt.Println("Slice is nil")
+		return errors.New("Slice is nil")
 	}
 	if g.Params.ImageWidth == 0 {
-		fmt.Println("Params is nil")
+		return errors.New("Params is nil")
 	}
 
 	subStrip := make([][]uint8, g.Slice.To - g.Slice.From)
@@ -237,16 +264,71 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 
 	resetGol(g)
 	g.setID(req.ID)
-	fmt.Println(g.ID, req.ID)
+	// fmt.Println(g.ID, req.ID)
 	g.setSlice(req.Slice)
 	g.setParams(req.Params)
 	g.setWorld(req.World)
 	err = g.setStrip()
+
+	if err != nil { return err }
 	res.Slice = req.Slice
 
-	fmt.Println(g.ID, g.Params, g.Slice)
+	// fmt.Println(g.ID, g.Params, g.Slice)
 
-	return err
+	return
+}
+
+//Joins halos and strip together to get a world
+func (g *Gol) combineWorld(topHalo []byte, bottomHalo []byte) {
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	g.World = make([][]uint8, 0)
+
+	g.World = append(g.World, topHalo)
+	
+	for _, row := range g.Strip {
+		g.World = append(g.World, row)
+	}
+
+	g.World = append(g.World, bottomHalo)
+}
+
+func (g *Gol) HaloSetup(req stubs.HaloSetupRequest, res *stubs.SetupResponse) (err error) {
+	runningCalls.Add(1); defer runningCalls.Done()
+
+	resetGol(g)
+	g.setID(req.ID)
+	g.setSlice(req.Slice)
+	g.setParams(req.Params)
+	err = g.setStrip()
+
+	if err != nil { return err }
+
+	g.combineWorld(req.TopHalo, req.BottomHalo) //generate subworld from strip and halos
+	res.Slice = req.Slice
+
+	return 
+}
+
+func (g *Gol) HaloTakeTurn(req stubs.HaloRequest, res *stubs.Response) (err error) {
+	runningCalls.Add(1); defer runningCalls.Done()
+	
+	g.combineWorld(req.TopHalo, req.BottomHalo)
+	calculateNextStateHalo(g, g.Params, /*_,*/ g.World, g.Slice.From, g.Slice.To, g.Turn)
+
+	g.TurnMut.Lock()
+	g.setTurn(g.Turn + 1)
+	g.TurnMut.Unlock()
+
+	g.Mut.Lock()
+	res.ID = g.ID
+	res.Strip = g.Strip
+	res.Slice = g.Slice
+	res.Turn = g.Turn
+	res.Alive = g.aliveStrip()
+
+	g.Mut.Unlock()
+
+	return
 }
 
 //RPC methods
