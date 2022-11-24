@@ -50,10 +50,16 @@ type AliveResponse struct {
 	OnTurn int
 }
 
+var SaveWorldHandler = "Broker.SaveWorld"
+type WorldResponse struct {
+	World [][]byte
+	OnTurn int
+}
 var PollWorldHandler = "Gol.PollWorld"
 //EmptyRequest
 //Response
 
+var BrokerFinishHander = "Broker.Finish"
 var FinishHander = "Gol.Finish"
 //EmptyRequest
 //EmptyResponse
@@ -62,12 +68,12 @@ var KillHandler = "Gol.Kill"
 //EmptyRequest
 //EmptyResponse
 
+var BrokerPauseHandler = "Broker.PauseGol"
 var PauseHandler = "Gol.PauseGol"
 type PauseRequest struct {
 	Pause bool
 }
 type PauseResponse struct {
-    World [][]byte
     Turns int
 }
 

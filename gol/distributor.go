@@ -3,7 +3,7 @@ package gol
 import (
 	"fmt"
 	"net/rpc"
-	_ "sync"
+	"sync"
 	"time"
 	_ "time"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
@@ -52,25 +52,7 @@ const aliveCellsPollDelay = 2 * time.Second
 
 
 
-//we only ever need write to events, and read from turns
-func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
-	//newRound :=
-	ticker := time.NewTicker(aliveCellsPollDelay)
-	for {
-		select {
-		case <-done:
-			return
-		case <-ticker.C:
-			req := stubs.EmptyRequest{}
 
-			res := new(stubs.AliveResponse)
-			//func (client *Client) Go(serviceMethod string, args any, reply any, done chan *Call) *Call
-
-			broker.Call(stubs.BrokerAliveHandler, req, res)
-			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: len(res.Alive)}
-		}
-	}
-}
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
 	//fmt.Printf("final %v; called on %v\n", p.Turns, currentTurn)
@@ -89,69 +71,94 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 }
 
 func finishServer(client *rpc.Client){
-	err := client.Call(stubs.FinishHander, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
+	err := client.Call(stubs.BrokerFinishHander, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
 	if err != nil {
 		fmt.Printf("Error client couldn't Finish server %s\n", err)
 	}
 }
 
-//func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, killServer chan<- bool) {
-//	isPaused := false
-//	for {
-//		k := <-keyPresses
-//		switch k {
-//		case 's':
-//			//request current state through stubs package
-//			//write the pgm out
-//			req := stubs.EmptyRequest{}
-//			res := new(stubs.Response)
-//
-//			remoteDone := make(chan *rpc.Call, 1)
-//			call := client.Go(stubs.PollWorldHandler, req, res, remoteDone)
-//			<-call.Done
-//			//fmt.Println("CALL FINSIHED FROM KEYPRESSER ", call.ServiceMethod)
-//			//fmt.Println("RESPONSE TURNS", res, "REPLY TURNS", call.Reply)
-//
-//			fmt.Println("Generating PGM")
-//			sendWriteCommand(p, c, res.Turn, res.World)
-//			fmt.Println("Generated PGM")
-//		case 'q':
-//			fmt.Println("Closing the controller client program")
-//			//leave the server running
-//			finishServer(client)
-//			return
-//		case 'k':
-//			//request closure of server through stubs package
-//			fmt.Println("Closing all components of the distributed system")
-//			finishServer(client)
-//			killServer <- true
-//			return
-//		case 'p':
-//			//request pausing of aws node through stubs package
-//			//then print the current turn
-//			//once p is pressed again resume processing through requesting from stubs
-//			if(!isPaused){
-//				donePause := make(chan *rpc.Call, 1)
-//				pauseRes := new(stubs.PauseResponse)
-//				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: true}, pauseRes, donePause)
-//				<-doPause.Done
-//				isPaused = true
-//				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Paused}
-//			}else{
-//				donePause := make(chan *rpc.Call, 1)
-//				pauseRes := new(stubs.PauseResponse)
-//				doPause := client.Go(stubs.PauseHandler, stubs.PauseRequest{Pause: false}, pauseRes, donePause)
-//				<-doPause.Done
-//				isPaused = false
-//
-//				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Executing}
-//			}
-//
-//		default:
-//
-//		}
-//	}
-//}
+var paused sync.Mutex
+
+//we only ever need write to events, and read from turns
+func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
+	//newRound :=
+	ticker := time.NewTicker(aliveCellsPollDelay)
+	for {
+		// paused.Lock()
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			req := stubs.EmptyRequest{}
+
+			res := new(stubs.AliveResponse)
+			//func (client *Client) Go(serviceMethod string, args any, reply any, done chan *Call) *Call
+
+			broker.Call(stubs.BrokerAliveHandler, req, res)
+			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: len(res.Alive)}
+		}
+		// paused.Unlock()
+	}
+}
+
+func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, killServer chan<- bool) {
+	isPaused := false
+	for {
+		k := <-keyPresses
+		switch k {
+		case 's':
+			//request current state through stubs package
+			//write the pgm out
+			req := stubs.EmptyRequest{}
+			res := new(stubs.WorldResponse)
+
+			remoteDone := make(chan *rpc.Call, 1)
+			call := client.Go(stubs.SaveWorldHandler, req, res, remoteDone)
+			<-call.Done
+			//fmt.Println("CALL FINSIHED FROM KEYPRESSER ", call.ServiceMethod)
+			//fmt.Println("RESPONSE TURNS", res, "REPLY TURNS", call.Reply)
+
+			fmt.Println("Generating PGM")
+			sendWriteCommand(p, c, res.OnTurn, res.World)
+			fmt.Println("Generated PGM")
+		case 'q':
+			fmt.Println("Closing the controller client program")
+			//leave the server running
+			finishServer(client)
+			return
+		// case 'k':
+		// 	//request closure of server through stubs package
+		// 	fmt.Println("Closing all components of the distributed system")
+		// 	finishServer(client)
+		// 	killServer <- true
+		// 	return
+		case 'p':
+			//request pausing of aws node through stubs package
+			//then print the current turn
+			//once p is pressed again resume processing through requesting from stubs
+			if(!isPaused){
+				paused.Lock()
+				donePause := make(chan *rpc.Call, 1)
+				pauseRes := new(stubs.PauseResponse)
+				doPause := client.Go(stubs.BrokerPauseHandler, stubs.PauseRequest{Pause: true}, pauseRes, donePause)
+				<-doPause.Done
+				isPaused = true
+				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Paused}
+			}else{
+				donePause := make(chan *rpc.Call, 1)
+				pauseRes := new(stubs.PauseResponse)
+				doPause := client.Go(stubs.BrokerPauseHandler, stubs.PauseRequest{Pause: false}, pauseRes, donePause)
+				<-doPause.Done
+				isPaused = false
+				c.events <-StateChange{CompletedTurns: pauseRes.Turns, NewState: Executing}
+				paused.Unlock()
+			}
+
+		default:
+
+		}
+	}
+}
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client) {
@@ -173,8 +180,8 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	}
 
 	//doneTakeTurns  := make(chan bool)
-	//killServer := make(chan bool, 1)
-	//go handleKeyPresses(p, c, client, keyPresses, killServer)
+	killServer := make(chan bool, 1)
+	go handleKeyPresses(p, c, client, keyPresses, killServer)
 	//
     //req := stubs.Request{World: world, Params: stubs.Params(p)}
     //res := new(stubs.Response)
