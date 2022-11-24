@@ -70,9 +70,6 @@ func handleError(err error) {
 	}
 }
 
-func distributeWork() {
-
-}
 
 func takeWorkers(b *Broker) []Worker {
 	threads := b.Threads
@@ -194,8 +191,9 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	}
 
 	i := 0
+	turnResponses := make([]stubs.Response, noWorkers)
 	for i < b.Turns {
-		turnResponses := make([]stubs.Response, noWorkers)
+		
 		//send a turn request to each worker selected
 		for workerId := 0; workerId < b.Threads; workerId++ {
 			turnReq := stubs.Request{World: b.getCurrentWorld()}
