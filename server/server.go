@@ -294,16 +294,15 @@ func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
 
-	g.WorldMut.Lock()
-	g.TurnMut.Lock()
+	g.WorldMut.Lock(); defer g.WorldMut.Unlock()
+	g.TurnMut.Lock(); defer g.TurnMut.Unlock()
 	if g.Params.Turns == 0 {
 		res.Alive = g.calculateAliveCells(g.Params, g.World)
 	} else {
 		res.Alive = g.aliveStrip()
 	}
 	res.OnTurn = g.Turn
-	g.TurnMut.Unlock()
-	g.WorldMut.Unlock()
+
 
 	return
 }

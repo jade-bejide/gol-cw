@@ -113,31 +113,27 @@ func (b *Broker) getNextWorld() [][]byte{
 	return *b.CurrentWorldPtr
 }
 
-func (b *Broker) getAliveCells(workers []Worker) []util.Cell { //mutex locks aren't helpful here when seting global variabls of broker
+func (b *Broker) getAliveCells(workers []Worker) ([]util.Cell, int) { //mutex locks aren't helpful here when seting global variabls of broker
 	//fmt.Println(b.Workers)
-	fmt.Println("Here")
-	b.AliveTurnMut.Lock(); defer b.AliveTurnMut.Unlock()
-	alive  := make([]util.Cell, 0)
-
+	alive := make([]util.Cell, 0)
+	var onTurn int
 	for workerId := 0; workerId < b.Threads; workerId++  {
 		aliveRes := new(stubs.AliveResponse)
 		workers[workerId].Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
 		alive = append(alive, aliveRes.Alive...)
-
-		b.AliveTurn = aliveRes.OnTurn
+		onTurn = aliveRes.OnTurn
 	}
 
-	fmt.Println("There")
-
-	return alive
+	return alive, onTurn
 }
 
+//connect to the workers in a loop
 func (b *Broker) setUpWorkers() {
 	b.Workers = make([]Worker, b.Threads)
 	for i := 0; i < b.Threads; i++ {
 		b.Workers[i].Ip = "localhost:"+strconv.Itoa(8032+i)
 
-		//connect to the worker
+		
 		client, err := rpc.Dial("tcp", b.Workers[i].Ip)
 
 		handleError(err)
@@ -188,34 +184,29 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	noWorkers := len(b.Workers)
 
-
-
 	out := make(chan *stubs.Response, b.Threads)
 
 	if b.Params.Turns == 0 {
-
-		
-		res.Alive = b.getAliveCells(workers)
+		res.Alive, _ = b.getAliveCells(workers)
 		res.Turns = b.Turns
 		res.World = req.World
 		return
 	}
-	fmt.Println(workers)
+
 	i := 0
 	for i < b.Turns {
 		turnResponses := make([]stubs.Response, noWorkers)
 		//send a turn request to each worker selected
-		for workerId := 0; workerId < len(workers); workerId++ {
-			worker := workers[workerId]
+		for workerId := 0; workerId < b.Threads; workerId++ {
 			turnReq := stubs.Request{World: b.getCurrentWorld()}
 			//receive response when ready (in any order) via the out channel
-			go func(){
+			go func(workerId int){
 				turnRes := new(stubs.Response)
 				// done := make(chan *rpc.Call, 1)
-				worker.Connection.Call(stubs.TurnHandler, turnReq, turnRes)
+				workers[workerId].Connection.Call(stubs.TurnHandler, turnReq, turnRes)
 				// <-done
 				out <- turnRes
-			}()
+			}(workerId)
 		}
 
 		//gather the work piecewise
@@ -239,7 +230,12 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		res.Turns++
 		//reconstruct the world to go again
 
-		// b.getAliveCells(workers)
+		b.AliveMut.Lock()
+		b.AliveTurnMut.Lock()
+		b.Alive, b.AliveTurn = b.getAliveCells(workers)
+		b.AliveMut.Unlock()
+		b.AliveTurnMut.Unlock()
+
 		b.WorldsMut.Unlock()
 		b.TurnsMut.Lock()
 		i++
@@ -248,35 +244,24 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	res.World = b.getCurrentWorld()
 
-
+	b.AliveMut.Lock()
+	res.Alive, _ = b.getAliveCells(workers)
+	b.AliveMut.Unlock()
 
 	//close the workers after we're finished
 	for _, worker := range workers {
 		worker.Connection.Close()
 	}
 
-	// b.AliveMut.Lock()
-	res.Alive = b.getAliveCells(workers)
-	// b.AliveMut.Unlock()
-
 	return
 }
 
 func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
-	fmt.Println("Reporting Alive")
-	// b.WorldsMut.Lock()
-	// b.TurnsMut.Lock()
 	
-	
-	res.Alive = b.getAliveCells(b.Workers)
-	b.AliveTurnMut.Lock()
+	b.AliveMut.Lock(); defer b.AliveMut.Unlock()
+	b.AliveTurnMut.Lock(); defer b.AliveTurnMut.Unlock()
+	res.Alive = b.Alive
 	res.OnTurn = b.AliveTurn
-	b.AliveTurnMut.Unlock()
-	
-	// b.TurnsMut.Lock()
-	// b.WorldsMut.Unlock()
-
-	fmt.Println("Reported Alive")
 	return
 }
 
