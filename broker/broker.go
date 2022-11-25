@@ -169,10 +169,7 @@ func (b *Broker) setUpWorkers() {
 }
 
 func (b *Broker) setCurrentWorldRow(rowIndex int, row []byte) {
-	b.WorldsMut.Lock()
-
-	(*b.CurrentWorldPtr)[rowIndex] = row
-	b.WorldsMut.Unlock()
+	b.getCurrentWorld()[rowIndex] = row
 }
 
 // func (b *Broker) setCurrentWorld([][]byte world) {
@@ -187,7 +184,18 @@ func (b *Broker) setCurrentWorldRow(rowIndex int, row []byte) {
 // 	b.NextWorldPtr = &world
 // }
 
-func (b *Broker) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error) {
+func (b *Broker) getCurrentAliveCells() []util.Cell {
+	b.AliveMut.Lock(); defer b.AliveMut.Unlock()
+
+	return b.Alive
+}
+
+func (b *Broker) Finish(req stubs.EmptyRequest, res *stubs.QuitWorldResponse) (err error) {
+	//finish itself
+	b.TurnsMut.Lock()
+	b.WorldsMut.Lock()
+	b.Idle = true
+	
 	//call all the servers to finish
 	for workerId := 0; workerId < b.Threads; workerId++ {
 		b.Workers[workerId].Lock.Lock()
@@ -197,10 +205,12 @@ func (b *Broker) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err e
 
 		b.Workers[workerId].Lock.Unlock()
 	}
-	//finish itself
-	b.TurnsMut.Lock()
-	b.WorldsMut.Lock()
-	b.Idle = true
+
+	res.OnTurn = b.OnTurn
+	res.Alive = b.Alive
+
+	fmt.Println("Going to sleep.")
+
 
 	return
 }
@@ -208,6 +218,8 @@ func (b *Broker) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err e
 
 //fault tolerance
 func (b *Broker) wakeUp() {
+	fmt.Println("Waking up")
+	b.setUpWorkers()
 	b.TurnsMut.Unlock()
 	b.WorldsMut.Unlock()
 }

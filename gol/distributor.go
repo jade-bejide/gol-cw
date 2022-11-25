@@ -70,11 +70,14 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 	c.events <- ImageOutputComplete{CompletedTurns: currentTurn, Filename: filename}
 }
 
-func finishServer(client *rpc.Client){
-	err := client.Call(stubs.BrokerFinishHander, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
+func finishServer(client *rpc.Client, c distributorChannels){
+	res := new(stubs.QuitWorldResponse)
+	err := client.Call(stubs.BrokerFinishHander, stubs.EmptyRequest{}, res)
 	if err != nil {
 		fmt.Printf("Error client couldn't Finish server %s\n", err)
 	}
+
+	c.events <- FinalTurnComplete{CompletedTurns: res.OnTurn, Alive: res.Alive}
 }
 
 var paused sync.Mutex
@@ -124,7 +127,7 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 		case 'q':
 			fmt.Println("Closing the controller client program")
 			//leave the server running
-			finishServer(client)
+			finishServer(client, c)
 			return
 		// case 'k':
 		// 	//request closure of server through stubs package

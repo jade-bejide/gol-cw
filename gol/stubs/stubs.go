@@ -60,6 +60,11 @@ var PollWorldHandler = "Gol.PollWorld"
 //Response
 
 var BrokerFinishHander = "Broker.Finish"
+
+type QuitWorldResponse struct {
+	OnTurn int
+	Alive [] util.Cell
+}
 var FinishHander = "Gol.Finish"
 //EmptyRequest
 //EmptyResponse
