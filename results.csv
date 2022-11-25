@@ -1,0 +1,17 @@
+name,time/op (ns/op),±
+GolWorkers/1_workers-8,1.25870E+10,0%
+GolWorkers/2_workers-8,1.00689E+10,0%
+GolWorkers/3_workers-8,9.60298E+09,0%
+GolWorkers/4_workers-8,7.18029E+09,0%
+GolWorkers/5_workers-8,6.26668E+09,0%
+GolWorkers/6_workers-8,5.46820E+09,0%
+GolWorkers/7_workers-8,5.20632E+09,0%
+GolWorkers/8_workers-8,4.95492E+09,0%
+GolWorkers/9_workers-8,4.98617E+09,0%
+GolWorkers/10_workers-8,4.72292E+09,0%
+GolWorkers/11_workers-8,4.60050E+09,0%
+GolWorkers/12_workers-8,4.61959E+09,0%
+GolWorkers/13_workers-8,4.50991E+09,0%
+GolWorkers/14_workers-8,4.50978E+09,0%
+GolWorkers/15_workers-8,4.45585E+09,0%
+GolWorkers/16_workers-8,4.51174E+09,0%
