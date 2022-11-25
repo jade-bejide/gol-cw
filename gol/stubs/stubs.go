@@ -92,6 +92,7 @@ var ClientHandler = "Broker.AcceptClient"
 type NewClientRequest struct {
 	World [][]byte
 	Params Params
+	Continue bool
 }
 type NewClientResponse struct {
 	World [][]byte

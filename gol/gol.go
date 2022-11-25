@@ -13,7 +13,7 @@ type Params struct {
 }
 
 // Run starts the processing of Game of Life. It should initialise channels and goroutines.
-func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
+func Run(p Params, events chan<- Event, keyPresses <-chan rune, cont bool) {
 	/*
 		inputs
 			p -> CL arguments
@@ -53,5 +53,5 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune) {
 	if(err != nil) { panic(err) } //rudimentary error handling
 	defer client.Close()
 
-	distributor(p, distributorChannels, keyPresses, client)
+	distributor(p, distributorChannels, keyPresses, client, cont)
 }

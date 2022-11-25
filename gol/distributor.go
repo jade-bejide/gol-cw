@@ -175,7 +175,7 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client) {
+func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client, cont bool) {
 	// TODO: Create a 2D slice to store the world.
 
 	c.ioCommand <- ioInput //send the appropriate command... (jump ln155)
@@ -185,13 +185,16 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	world := make([][]byte, p.ImageHeight)
 
-	for y := 0; y < p.ImageHeight; y++ {
-		world[y] = make([]byte, p.ImageWidth)
-		for x := 0; x < p.ImageWidth; x++ {
-			pixel := <-c.ioInput //gets image in with the io.goroutine
-			world[y][x] = pixel
+	if !cont {
+		for y := 0; y < p.ImageHeight; y++ {
+			world[y] = make([]byte, p.ImageWidth)
+			for x := 0; x < p.ImageWidth; x++ {
+				pixel := <-c.ioInput //gets image in with the io.goroutine
+				world[y][x] = pixel
+			}
 		}
 	}
+
 
 	//doneTakeTurns  := make(chan bool)
 	killServer := make(chan bool, 1)
@@ -210,15 +213,10 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	params := stubs.Params{Turns: p.Turns, Threads: p.Threads, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight}
 
-	brokerReq := stubs.NewClientRequest{World: world, Params: params}
+	brokerReq := stubs.NewClientRequest{World: world, Params: params, Continue: cont}
 	brokerRes := new(stubs.NewClientResponse)
 
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
-	//for _, row := range brokerRes.World {
-	//	fmt.Println(row)
-	//}
-	//var emptyReq stubs.EmptyRequest
-	//var worldRes *stubs.Response
 
 	// <-call.Done
 	<-killServer

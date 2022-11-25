@@ -179,9 +179,7 @@ func (b *Broker) setUpWorkers() {
 
 }
 
-func (b *Broker) setCurrentWorldRow(rowIndex int, row []byte) {
-	b.getCurrentWorld()[rowIndex] = row
-}
+
 
 // func (b *Broker) setCurrentWorld([][]byte world) {
 // 	b.WorldsMut.Lock(); defer b.WorldsMut.Unlock()
@@ -229,6 +227,7 @@ func (b *Broker) KillBroker(req stubs.EmptyRequest, res *stubs.KillBrokerRespons
 	b.WorldsMut.Unlock(); b.TurnsMut.Unlock()
 
 	kill <- true
+	fmt.Println("Set to close when ready")
 	return
 }
 
@@ -268,6 +267,11 @@ func (b *Broker) wakeUp() {
 	b.WorldsMut.Unlock()
 }
 
+func (b *Broker) setCurrentWorldRow(rowIndex int, row []byte) {
+	b.WorldsMut.Lock(); defer b.WorldsMut.Unlock()
+	(*b.CurrentWorldPtr)[rowIndex] = row
+}
+
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	runningCalls.Add(1); defer runningCalls.Done()
 	fmt.Println("Hello?")
@@ -275,30 +279,46 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	//world
 	//turns
 
-	if b.Idle { b.wakeUp() }
+	var world [][]byte
+	var i int
 
-	b.WorldsMut.Lock()
-	b.CurrentWorldPtr = &b.WorldA
-	b.NextWorldPtr = &b.WorldB
-	*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
-	*b.NextWorldPtr = req.World // to be overwritten
-	b.WorldsMut.Unlock()
 
-	b.Params = req.Params
-	b.Threads = req.Params.Threads
-
-	b.setUpWorkers()
-
-	b.TurnsMut.Lock()
-	b.Turns = req.Params.Turns
-	b.TurnsMut.Unlock()
-
-	//send work to the gol workers
-	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
-	// workers := takeWorkers(b)
 	workers := b.Workers
+	if b.Idle { 
+		b.wakeUp()
 
-	if len(workers) == 0 { return } //let client know that there are no workers available
+		if !req.Continue {
+			
+			b.WorldsMut.Lock()
+			b.CurrentWorldPtr = &b.WorldA
+			b.NextWorldPtr = &b.WorldB
+			*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
+			*b.NextWorldPtr = req.World // to be overwritten
+			b.WorldsMut.Unlock()
+		
+			b.Params = req.Params
+			b.Threads = req.Params.Threads
+		
+			b.setUpWorkers()
+		
+			b.TurnsMut.Lock()
+			b.Turns = req.Params.Turns
+			b.TurnsMut.Unlock()
+
+			//send work to the gol workers
+			workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
+
+			i = 0
+		} else { i = b.OnTurn }
+	}
+
+
+
+
+	// workers := takeWorkers(b)
+	
+
+	// if len(workers) == 0 { return } //let client know that there are no workers available
 
 
 
@@ -324,7 +344,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		return
 	}
 
-	i := 0
+	
 	for i < b.Turns {
 		turnResponses := make([]stubs.Response, noWorkers)
 		//send a turn request to each worker selected
@@ -352,8 +372,11 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		
 		for _, response := range turnResponses {
 			strip := response.Strip
-			for _, row := range strip {
-				b.setCurrentWorldRow(rowNum, row)
+			for rowIndex := 0; rowIndex < len(strip); rowIndex++ {
+				b.WorldsMut.Lock()
+				(*b.CurrentWorldPtr)[rowNum] = strip[rowIndex]
+				// b.setCurrentWorldRow(rowNum, row)
+				b.WorldsMut.Unlock()
 				rowNum++
 			}
 
@@ -415,11 +438,17 @@ func main() {
 	handleError(err)
 	
 	rpc.Accept(listener)
+	fmt.Println("Setting up workers")
 	broker.setUpWorkers()
+	fmt.Println("Set up workers")
+
+	fmt.Println("Dying...")
 	<-kill
 	//wait for the calls to terminate before I kill myself
 	runningCalls.Wait()
-
+	fmt.Println("Dead")
 	err = listener.Close()
 	handleError(err)
+
+	fmt.Println("Close broker")
 }
