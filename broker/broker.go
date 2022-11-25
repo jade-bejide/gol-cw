@@ -215,7 +215,7 @@ func (b *Broker) KillBroker(req stubs.EmptyRequest, res *stubs.KillBrokerRespons
 		b.Workers[workerId].Lock.Lock()
 
 		fmt.Println("Attempting to kill worker", workerId)
-		err := b.Workers[workerId].Connection.Call(stubs.KillHandler, stubs.EmptyRequest{}, stubs.EmptyResponse{})
+		err := b.Workers[workerId].Connection.Call(stubs.KillHandler, stubs.EmptyRequest{}, &stubs.EmptyResponse{})
 		handleError(err)
 		b.Workers[workerId].Connection.Close()
 		fmt.Println("Killed worker", workerId)
