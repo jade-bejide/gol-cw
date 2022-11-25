@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
-	"sync"
+	"os"
 	"strconv"
+	"sync"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -32,6 +33,7 @@ func spreadWorkload(h int, threads int) []int {
 	}
 	return splits
 }
+
 type ClientTask struct {
 	Client *rpc.Client
 	Threads int
@@ -46,15 +48,19 @@ type Worker struct {
 	Connection *rpc.Client
 	Done chan *rpc.Call
 }
+
 type Broker struct {
 	Threads int
 	WorldsMut sync.Mutex
 	TurnsMut sync.Mutex
-	WorldA [][]byte // this is an optimisation that reduces the number of memory allocations on each turn
-	WorldB [][]byte // these worlds take turns to be the next world being written into
-	IsCurrentA bool
-	CurrentWorldPtr *[][]byte
-	NextWorldPtr *[][]byte
+	InWorld [][]uint8
+	OutWorld [][]uint8
+	// no longer needs to write the world to our struct
+	//WorldA [][]byte // this is an optimisation that reduces the number of memory allocations on each turn
+	//WorldB [][]byte // these worlds take turns to be the next world being written into
+	//IsCurrentA bool
+	//CurrentWorldPtr *[][]byte
+	//NextWorldPtr *[][]byte
 	Turns int
 	Workers []Worker //have 16 workers by default, as this is the max size given in tests
 	Params stubs.Params
@@ -91,25 +97,6 @@ func takeWorkers(b *Broker) []Worker {
 	return make([]Worker, 0) //if not all workers are available, no workers are available
 }
 
-func (b *Broker) alternateWorld() {
-	if b.IsCurrentA {
-		b.CurrentWorldPtr = &b.WorldB
-		b.NextWorldPtr = &b.WorldA
-	}else {
-		b.CurrentWorldPtr = &b.WorldA
-		b.NextWorldPtr = &b.WorldB
-	}
-	b.IsCurrentA = !b.IsCurrentA
-}
-
-func (b *Broker) getCurrentWorld() [][]byte{
-	return *b.CurrentWorldPtr
-}
-
-func (b *Broker) getNextWorld() [][]byte{
-	return *b.CurrentWorldPtr
-}
-
 func (b *Broker) getAliveCells(workers []Worker) {
 	//fmt.Println(b.Workers)
 	b.Alive = make([]util.Cell, 0)
@@ -132,17 +119,19 @@ func (b *Broker) getHalos(y1 int, y2 int) ([]byte, []byte) {
 	var topHalo []byte
 	var bottomHalo []byte
 
-	if y1 == 0 && y2 == size{ 
-		topHalo = b.getCurrentWorld()[size-1]
-		bottomHalo = b.getCurrentWorld()[0]
+	b.WorldsMut.Lock()
+	if y1 == 0 && y2 == size{
+		topHalo = b.InWorld[size-1]
+		bottomHalo = b.InWorld[0]
 	} else if y1 == 0 {
-		topHalo = b.getCurrentWorld()[size-1]
+		topHalo = b.InWorld[size-1]
 	} else if y2 == size {
-		bottomHalo = b.getCurrentWorld()[0]
+		bottomHalo = b.InWorld[0]
 	} else {
-		topHalo = b.getCurrentWorld()[y1-1]
-		bottomHalo = b.getCurrentWorld()[y2] //y2 isn't exclusive
+		topHalo = b.InWorld[y1-1]
+		bottomHalo = b.InWorld[y2] //y2 is exclusive
 	}
+	b.WorldsMut.Unlock()
 
 	return topHalo, bottomHalo
 }
@@ -153,10 +142,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	//turns
 
 	b.WorldsMut.Lock()
-	b.CurrentWorldPtr = &b.WorldA
-	b.NextWorldPtr = &b.WorldB
-	*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
-	*b.NextWorldPtr = req.World // to be overwritten
+	b.InWorld = req.World ///deref currentworld in order to change its actual content to the new world
 	b.WorldsMut.Unlock()
 
 	b.Params = req.Params
@@ -187,18 +173,31 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 
 	for workerId := 0; workerId < len(workers); workerId++ {
-		worker := workers[workerId]
+		nextId := (workerId - 1 + len(workers)) % len(workers)
+		lastId := (workerId + 1 + len(workers)) % len(workers)
+		above := workers[nextId].Ip
+		below := workers[lastId].Ip
+		worker := &workers[workerId]
 		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
 
-		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params, World: req.World}
-		err = worker.Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
-
+		setupReq := stubs.SetupRequest{
+			ID: workerId,
+			Slice: b.InWorld[y1:y2], //this needs to include the ghost rows
+			Params: b.Params,
+			Above: above,
+			//in-between: this slice
+			Below: below,
+		}
+		setupRes := new(stubs.SetupResponse)
+		err = worker.Connection.Call(stubs.SetupHandler, setupReq, setupRes)
 		handleError(err)
+		if !setupRes.Success { //fault toll
+			fmt.Println("Error workers could not find each other!")
+			os.Exit(1)
+		}
 	}
 
 	noWorkers := len(b.Workers)
-
-
 
 	out := make(chan *stubs.Response, b.Threads)
 
@@ -212,51 +211,54 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	}
 	fmt.Println(workers)
 	i := 0
-	for i < b.Turns {
-		turnResponses := make([]stubs.Response, noWorkers)
-		//send a turn request to each worker selected
-		for workerId := 0; workerId < len(workers); workerId++ {
-			worker := workers[workerId]
-			turnReq := stubs.Request{World: b.getCurrentWorld()}
-			//receive response when ready (in any order) via the out channel
-			go func(){
-				turnRes := new(stubs.Response)
-				// done := make(chan *rpc.Call, 1)
-				worker.Connection.Call(stubs.TurnHandler, turnReq, turnRes)
-				// <-done
-				out <- turnRes
-			}()
-		}
 
-		//gather the work piecewise
-		for worker := 0; worker < b.Threads; worker++ {
-			turnRes := <-out
-			turnResponses[turnRes.ID] = *turnRes
-		}
-
-		b.Alive = make([]util.Cell, 0)
-		rowNum := 0
-		b.WorldsMut.Lock()
-		for _, response := range turnResponses {
-			strip := response.Strip
-			for _, row := range strip {
-				b.getCurrentWorld()[rowNum] = row
-				rowNum++
+	turnResponses := make([]stubs.Response, noWorkers)
+	//send a turn request to each worker selected
+	for workerId := 0; workerId < len(workers); workerId++ {
+		worker := &workers[workerId]
+		turnReq := stubs.Request{Params: req.Params, World:}
+		//receive response when ready (in any order) via the out channel
+		go func(){
+			turnRes := new(stubs.Response)
+			// done := make(chan *rpc.Call, 1)
+			err := worker.Connection.Call(stubs.TurnsHandler, turnReq, turnRes)
+			if err != nil {
+				handleError(err)
 			}
-
-		}
-		// b.alternateWorld()
-		res.Turns++
-		//reconstruct the world to go again
-
-		b.getAliveCells(workers)
-		b.WorldsMut.Unlock()
-		b.TurnsMut.Lock()
-		i++
-		b.TurnsMut.Unlock()
+			// <-done
+			out <- turnRes
+		}()
 	}
 
-	res.World = b.getCurrentWorld()
+	//gather the work piecewise
+	for worker := 0; worker < b.Threads; worker++ {
+		turnRes := <-out
+		turnResponses[turnRes.ID] = *turnRes
+	}
+
+	b.Alive = make([]util.Cell, 0)
+	rowNum := 0
+	b.WorldsMut.Lock()
+	for _, response := range turnResponses {
+		slice := response.Slice
+		for _, row := range slice {
+			b.OutWorld[rowNum] = row
+			rowNum++
+		}
+
+	}
+	// b.alternateWorld()
+	res.Turns++
+	//reconstruct the world to go again
+
+	b.getAliveCells(workers)
+	b.WorldsMut.Unlock()
+	b.TurnsMut.Lock()
+	i++
+	b.TurnsMut.Unlock()
+
+
+	res.World = b.OutWorld
 
 
 
@@ -290,7 +292,7 @@ func main() {
 
 
 
-	rpc.Register(&Broker{IsCurrentA: true})
+	rpc.Register(&Broker{})
 	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
 	fmt.Println("Listening on ", *pAddr)
 
