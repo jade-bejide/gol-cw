@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	_ "flag"
 	"fmt"
