@@ -70,6 +70,12 @@ var FinishHander = "Gol.Finish"
 //EmptyResponse
 
 var KillHandler = "Gol.Kill"
+
+var KillBroker = "Broker.KillBroker"
+type KillBrokerResponse struct {
+	OnTurn int
+	Alive []util.Cell
+}
 //EmptyRequest
 //EmptyResponse
 

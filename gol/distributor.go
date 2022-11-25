@@ -55,7 +55,7 @@ const aliveCellsPollDelay = 2 * time.Second
 
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
-	//fmt.Printf("final %v; called on %v\n", p.Turns, currentTurn)
+	fmt.Printf("final %v; called on %v\n", p.Turns, currentTurn)
 
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
 	c.ioCommand <- ioOutput
@@ -77,6 +77,17 @@ func finishServer(client *rpc.Client, c distributorChannels){
 		fmt.Printf("Error client couldn't Finish server %s\n", err)
 	}
 
+	c.events <- FinalTurnComplete{CompletedTurns: res.OnTurn, Alive: res.Alive}
+}
+
+func kill(client *rpc.Client, c distributorChannels) {
+	res := new(stubs.KillBrokerResponse)
+
+	err := client.Call(stubs.KillBroker, stubs.EmptyRequest{}, res)
+
+	if err != nil {
+		fmt.Println("Error: client couldn't kill nodes")
+	}
 	c.events <- FinalTurnComplete{CompletedTurns: res.OnTurn, Alive: res.Alive}
 }
 
@@ -129,12 +140,12 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 			//leave the server running
 			finishServer(client, c)
 			return
-		// case 'k':
-		// 	//request closure of server through stubs package
-		// 	fmt.Println("Closing all components of the distributed system")
-		// 	finishServer(client)
-		// 	killServer <- true
-		// 	return
+		case 'k':
+			//request closure of server through stubs package
+			fmt.Println("Closing all components of the distributed system")
+			kill(client, c)
+			killServer <- true
+			return
 		case 'p':
 			//request pausing of aws node through stubs package
 			//then print the current turn
@@ -192,9 +203,8 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	done := make(chan bool)
 	go ticks(c, client, done)
 	//
-	//remoteDone := make(chan *rpc.Call, 1)
+	// remoteDone := make(chan *rpc.Call, 1)
     //call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
-
 	//var alive []util.Cell
 	//var turns int
 
@@ -202,6 +212,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	brokerReq := stubs.NewClientRequest{World: world, Params: params}
 	brokerRes := new(stubs.NewClientResponse)
+
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
 	//for _, row := range brokerRes.World {
 	//	fmt.Println(row)
@@ -209,15 +220,16 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	//var emptyReq stubs.EmptyRequest
 	//var worldRes *stubs.Response
 
-	//<-call.Done
+	// <-call.Done
+	<-killServer
 	//world = res.World
 	//alive = res.Alive
 	//turns = res.Turn
-	//select {
-	//	case <-killServer:
-	//		client.Go(stubs.KillHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse), nil)
-	//	default:
-	//}
+	// select {
+	// 	case <-killServer:
+	// 		client.Go(stubs.KillHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse), nil)
+	// 	default:
+	// }
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	final := FinalTurnComplete{CompletedTurns: brokerRes.Turns, Alive: brokerRes.Alive}

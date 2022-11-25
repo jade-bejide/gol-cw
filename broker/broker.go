@@ -11,6 +11,9 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
+var kill = make(chan bool, 1)
+var runningCalls = sync.WaitGroup{}
+
 func spreadWorkload(h int, threads int) []int {
 	splits := make([]int, threads+1)
 
@@ -120,8 +123,10 @@ func (b *Broker) getAliveCells(workers []Worker) ([]util.Cell, int) { //mutex lo
 	alive := make([]util.Cell, 0)
 	var onTurn int
 	for workerId := 0; workerId < b.Threads; workerId++  {
+		workers[workerId].Lock.Lock()
 		aliveRes := new(stubs.AliveResponse)
 		workers[workerId].Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
+		workers[workerId].Lock.Unlock()
 		alive = append(alive, aliveRes.Alive...)
 		onTurn = aliveRes.OnTurn
 	}
@@ -131,6 +136,8 @@ func (b *Broker) getAliveCells(workers []Worker) ([]util.Cell, int) { //mutex lo
 
 //SDL Key Presses RPCs
 func (b *Broker) SaveWorld(req stubs.EmptyRequest, res *stubs.WorldResponse) (err error) {
+	runningCalls.Add(1); defer runningCalls.Done()
+	
 	b.TurnsMut.Lock(); defer b.TurnsMut.Unlock()
 
 	res.World = b.getCurrentWorld()
@@ -140,6 +147,8 @@ func (b *Broker) SaveWorld(req stubs.EmptyRequest, res *stubs.WorldResponse) (er
 }
 
 func (b *Broker) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
+	runningCalls.Add(1); defer runningCalls.Done()
+	
 	if req.Pause {
 		b.TurnsMut.Lock(); b.WorldsMut.Lock() 
 		res.Turns = b.OnTurn	
@@ -150,6 +159,8 @@ func (b *Broker) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err
 
 	return
 }
+
+
 
 //connect to the workers in a loop
 func (b *Broker) setUpWorkers() {
@@ -190,7 +201,40 @@ func (b *Broker) getCurrentAliveCells() []util.Cell {
 	return b.Alive
 }
 
+func (b *Broker) getTurn() int {
+	b.TurnsMut.Lock(); defer b.TurnsMut.Unlock()
+
+	return b.OnTurn
+}
+
+func (b *Broker) KillBroker(req stubs.EmptyRequest, res *stubs.KillBrokerResponse) (err error) {
+	runningCalls.Add(1); defer runningCalls.Done()
+
+	b.WorldsMut.Lock(); b.TurnsMut.Lock();
+	for workerId := 0; workerId < b.Threads; workerId++ {
+		b.Workers[workerId].Lock.Lock()
+
+		fmt.Println("Attempting to kill worker", workerId)
+		err := b.Workers[workerId].Connection.Call(stubs.KillHandler, stubs.EmptyRequest{}, stubs.EmptyResponse{})
+		handleError(err)
+		b.Workers[workerId].Connection.Close()
+		fmt.Println("Killed worker", workerId)
+
+		b.Workers[workerId].Lock.Unlock()
+	}
+
+	res.Alive = b.getCurrentAliveCells()
+	res.OnTurn = b.OnTurn
+
+	b.WorldsMut.Unlock(); b.TurnsMut.Unlock()
+
+	kill <- true
+	return
+}
+
 func (b *Broker) Finish(req stubs.EmptyRequest, res *stubs.QuitWorldResponse) (err error) {
+	runningCalls.Add(1); defer runningCalls.Done()
+	
 	//finish itself
 	b.TurnsMut.Lock()
 	b.WorldsMut.Lock()
@@ -225,6 +269,8 @@ func (b *Broker) wakeUp() {
 }
 
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
+	runningCalls.Add(1); defer runningCalls.Done()
+	fmt.Println("Hello?")
 	//threads
 	//world
 	//turns
@@ -260,7 +306,9 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
 
 		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params, World: req.World}
+		workers[workerId].Lock.Lock()
 		err = workers[workerId].Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
+		workers[workerId].Lock.Unlock()
 
 		handleError(err)
 	}
@@ -286,8 +334,9 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			go func(workerId int){
 				turnRes := new(stubs.Response)
 				// done := make(chan *rpc.Call, 1)
+				workers[workerId].Lock.Lock()
 				workers[workerId].Connection.Call(stubs.TurnHandler, turnReq, turnRes)
-				// <-done
+				workers[workerId].Lock.Unlock()
 				out <- turnRes
 			}(workerId)
 		}
@@ -341,7 +390,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 }
 
 func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
-	
+	runningCalls.Add(1); defer runningCalls.Done()
 	b.AliveMut.Lock(); defer b.AliveMut.Unlock()
 	b.AliveTurnMut.Lock(); defer b.AliveTurnMut.Unlock()
 	res.Alive = b.Alive
@@ -356,16 +405,21 @@ func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (
 func main() {
 	pAddr := flag.String("port", "8031", "Port to listen on")
 	flag.Parse()
-
-
+	
+	
 	broker := Broker{IsCurrentA: true}
 	rpc.Register(&broker)
 	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
 	fmt.Println("Listening on ", *pAddr)
-
+	
 	handleError(err)
-	defer listener.Close()
+	
 	rpc.Accept(listener)
 	broker.setUpWorkers()
+	<-kill
+	//wait for the calls to terminate before I kill myself
+	runningCalls.Wait()
 
+	err = listener.Close()
+	handleError(err)
 }
