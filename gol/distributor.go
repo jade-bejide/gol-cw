@@ -311,6 +311,7 @@ func (g *Gol) handleSDL(p Params, c distributorChannels, keyPresses <-chan rune,
 				sendWriteCommand(p, c, g.Turns, *g.World)
 
 				paused = true
+				fmt.Println("Paused on turn", g.Turns)
 			} else {
 				g.TurnsMut.Lock()
 				c.events <- StateChange{CompletedTurns: g.Turns, NewState: Executing}
@@ -380,6 +381,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune) {
 	}
 
 	splits := spreadWorkload(len(world), p.Threads)
+	//fmt.Println(splits)
 
 	// TODO: Execute all turns of the Game of Life.
 
