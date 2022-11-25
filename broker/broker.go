@@ -67,6 +67,8 @@ type Broker struct {
 	AliveTurnMut sync.Mutex
 	OnTurn int
 	Idle bool
+
+	ThreadMut sync.Mutex
 }
 
 func (b *Broker) brokerDebug() {
@@ -188,6 +190,7 @@ func (b *Broker) setUpWorkers() {
 
 		handleError(err)
 		b.Workers[i].Connection = client
+		b.Workers[i].Working = true
 		b.Workers[i].Lock.Unlock()
 	}
 }
@@ -292,6 +295,23 @@ func (b *Broker) getCurrentTurn() int {
 	return b.OnTurn
 }
 
+//called each time the broker attempts to call a workers
+func (b *Broker) handleNodeFailure(err error, worker Worker) bool {
+	if err != nil {
+		//assume the node is failed
+
+		b.ThreadMut.Lock()
+
+		worker.Working = false //don't use this worker anymore
+		b.Threads--
+		b.ThreadMut.Unlock()
+
+		return true //checking that an error has occured
+	}
+
+	return false
+}
+
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	runningCalls.Add(1); defer runningCalls.Done()
 	// fmt.Println("Hello?")
@@ -394,17 +414,21 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	for i < b.Turns {
 		turnResponses := make([]stubs.Response, noWorkers)
 		//send a turn request to each worker selected
-		for workerId := 0; workerId < b.Threads; workerId++ {
+		workerId := 0
+		for workerId := 0; workerId < b.Threads {
 			turnReq := stubs.Request{World: b.getCurrentWorld()}
 			//receive response when ready (in any order) via the out channel
 			go func(workerId int){
 				turnRes := new(stubs.Response)
 				// done := make(chan *rpc.Call, 1)
 				workers[workerId].Lock.Lock()
-				workers[workerId].Connection.Call(stubs.TurnHandler, turnReq, turnRes)
+				err := workers[workerId].Connection.Call(stubs.TurnHandler, turnReq, turnRes)
+				handleNodeFailure(err)
 				workers[workerId].Lock.Unlock()
 				out <- turnRes
 			}(workerId)
+
+			workerId++
 		}
 
 		//gather the work piecewise
