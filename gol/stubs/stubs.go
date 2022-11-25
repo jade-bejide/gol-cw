@@ -24,6 +24,7 @@ type SetupRequest struct {
 	Slice Slice
 	Params Params
 	World [][]byte
+	Turn int
 }
 type SetupResponse struct {
 	ID int

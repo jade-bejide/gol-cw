@@ -185,15 +185,15 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	world := make([][]byte, p.ImageHeight)
 
-	if !cont {
-		for y := 0; y < p.ImageHeight; y++ {
-			world[y] = make([]byte, p.ImageWidth)
-			for x := 0; x < p.ImageWidth; x++ {
-				pixel := <-c.ioInput //gets image in with the io.goroutine
-				world[y][x] = pixel
-			}
+	// if !cont {
+	for y := 0; y < p.ImageHeight; y++ {
+		world[y] = make([]byte, p.ImageWidth)
+		for x := 0; x < p.ImageWidth; x++ {
+			pixel := <-c.ioInput //gets image in with the io.goroutine
+			world[y][x] = pixel
 		}
 	}
+	// }
 
 
 	//doneTakeTurns  := make(chan bool)

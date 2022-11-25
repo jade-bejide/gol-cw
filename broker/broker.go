@@ -69,6 +69,18 @@ type Broker struct {
 	Idle bool
 }
 
+func (b *Broker) brokerDebug() {
+	fmt.Println("BROKER DEBUG")
+
+	fmt.Println("Threads", b.Threads)
+	fmt.Println("Turns", b.Turns)
+	fmt.Println("Current Turn", b.OnTurn)
+	fmt.Println("Idle", b.Idle)
+	fmt.Println("Params", b.Params)
+
+	fmt.Println()
+}
+
 func handleError(err error) {
 	if err != nil {
 		panic(err)
@@ -129,6 +141,8 @@ func (b *Broker) getAliveCells(workers []Worker) ([]util.Cell, int) { //mutex lo
 		workers[workerId].Lock.Unlock()
 		alive = append(alive, aliveRes.Alive...)
 		onTurn = aliveRes.OnTurn
+
+		fmt.Println(onTurn)
 	}
 
 	return alive, onTurn
@@ -176,7 +190,6 @@ func (b *Broker) setUpWorkers() {
 		b.Workers[i].Connection = client
 		b.Workers[i].Lock.Unlock()
 	}
-
 }
 
 
@@ -262,6 +275,7 @@ func (b *Broker) Finish(req stubs.EmptyRequest, res *stubs.QuitWorldResponse) (e
 //fault tolerance
 func (b *Broker) wakeUp() {
 	fmt.Println("Waking up")
+	b.Idle = false
 	b.setUpWorkers()
 	b.TurnsMut.Unlock()
 	b.WorldsMut.Unlock()
@@ -272,18 +286,22 @@ func (b *Broker) setCurrentWorldRow(rowIndex int, row []byte) {
 	(*b.CurrentWorldPtr)[rowIndex] = row
 }
 
+func (b *Broker) getCurrentTurn() int {
+	b.TurnsMut.Lock(); defer b.TurnsMut.Unlock()
+
+	return b.OnTurn
+}
+
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	runningCalls.Add(1); defer runningCalls.Done()
-	fmt.Println("Hello?")
+	// fmt.Println("Hello?")
 	//threads
 	//world
 	//turns
-
-	var world [][]byte
 	var i int
 
 
-	workers := b.Workers
+	b.brokerDebug()
 	if b.Idle { 
 		b.wakeUp()
 
@@ -305,33 +323,44 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			b.Turns = req.Params.Turns
 			b.TurnsMut.Unlock()
 
-			//send work to the gol workers
-			workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
+
 
 			i = 0
-		} else { i = b.OnTurn }
+		} else { 
+			b.setUpWorkers()
+
+			fmt.Println("Continuing")
+			i = b.getCurrentTurn()
+		}
+	} else {
+		b.WorldsMut.Lock()
+		b.CurrentWorldPtr = &b.WorldA
+		b.NextWorldPtr = &b.WorldB
+		*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
+		*b.NextWorldPtr = req.World // to be overwritten
+		b.WorldsMut.Unlock()
+	
+		b.Params = req.Params
+		b.Threads = req.Params.Threads
+	
+		b.setUpWorkers()
+	
+		b.TurnsMut.Lock()
+		b.Turns = req.Params.Turns
+		b.TurnsMut.Unlock()
+
+
+
+		i = 0
 	}
 
 
-
+	workers := b.Workers
 
 	// workers := takeWorkers(b)
 	
 
 	// if len(workers) == 0 { return } //let client know that there are no workers available
-
-
-
-	for workerId := 0; workerId < len(workers); workerId++ {
-		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
-
-		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params, World: req.World}
-		workers[workerId].Lock.Lock()
-		err = workers[workerId].Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
-		workers[workerId].Lock.Unlock()
-
-		handleError(err)
-	}
 
 	noWorkers := len(b.Workers)
 
@@ -340,9 +369,26 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	if b.Params.Turns == 0 {
 		res.Alive, _ = b.getAliveCells(workers)
 		res.Turns = b.Turns
-		res.World = req.World
+		res.World = b.getCurrentWorld()
 		return
 	}
+
+	//send work to the gol workers
+	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
+
+	for workerId := 0; workerId < len(workers); workerId++ {
+		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
+
+		setupReq := stubs.SetupRequest{ID: workerId, Slice: stubs.Slice{From: y1, To: y2}, Params: b.Params, World: b.getCurrentWorld(), Turn: i}
+		workers[workerId].Lock.Lock()
+		err = workers[workerId].Connection.Call(stubs.SetupHandler, setupReq, new(stubs.SetupResponse))
+		workers[workerId].Lock.Unlock()
+
+		handleError(err)
+	}
+
+
+	
 
 	
 	for i < b.Turns {
@@ -416,6 +462,7 @@ func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (
 	runningCalls.Add(1); defer runningCalls.Done()
 	b.AliveMut.Lock(); defer b.AliveMut.Unlock()
 	b.AliveTurnMut.Lock(); defer b.AliveTurnMut.Unlock()
+	// b.TurnsMut.Lock(); defer b.TurnsMut.Unlock()
 	res.Alive = b.Alive
 	res.OnTurn = b.AliveTurn
 	return
@@ -437,9 +484,9 @@ func main() {
 	
 	handleError(err)
 	
-	rpc.Accept(listener)
+	go rpc.Accept(listener)
 	fmt.Println("Setting up workers")
-	broker.setUpWorkers()
+	// broker.setUpWorkers()
 	fmt.Println("Set up workers")
 
 	fmt.Println("Dying...")

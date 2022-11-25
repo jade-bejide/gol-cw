@@ -193,7 +193,7 @@ func (g *Gol) setWorld(w [][]uint8){
 	g.World = w
 }
 
-func (g *Gol) setTurn(t int){
+func (g *Gol) initTurn(t int){
 	g.Mut.Lock(); defer g.Mut.Unlock()
 	g.Turn = t
 }
@@ -213,6 +213,11 @@ func (g *Gol) setID(id int){
 	g.ID = id
 }
 
+func (g *Gol) setTurn(turn int) {
+	g.Mut.Lock(); defer g.Mut.Unlock()
+	g.Turn = turn
+}
+
 func (g *Gol) setStrip() (err error){ //depends entirely on slice, this means it can return errors
 	g.Mut.Lock(); defer g.Mut.Unlock()
 	if g.Slice.To == 0 && g.Slice.From == 0 {
@@ -223,11 +228,18 @@ func (g *Gol) setStrip() (err error){ //depends entirely on slice, this means it
 	}
 
 	subStrip := make([][]uint8, g.Slice.To - g.Slice.From)
+
+	g.WorldMut.Lock()
+
+	j := g.Slice.From
 	for i := range subStrip {
-		subStrip[i] = make([]uint8, g.Params.ImageWidth)
+		subStrip[i] = g.World[j]
+		j++
 	}
 
 	g.Strip = subStrip
+
+	g.WorldMut.Unlock()
 	return
 }
 
@@ -242,6 +254,7 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	g.setSlice(req.Slice)
 	g.setParams(req.Params)
 	g.setWorld(req.World)
+	g.initTurn(req.Turn)
 	err = g.setStrip()
 	res.Slice = req.Slice
 
