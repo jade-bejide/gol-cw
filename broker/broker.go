@@ -117,23 +117,17 @@ func (b *Broker) setUpWorkers() {
 func (b *Broker) getHalos(y1 int, y2 int) ([]byte, []byte) {
 	size := b.Params.ImageHeight
 	var topHalo []byte
-	var bottomHalo []byte
+	var botHalo []byte
+
+	topRowNum := (size + y1 - 1) % size
+	botRowNum := (size + y2) % size //upper number in splitWorkloads is exclusive
 
 	b.WorldsMut.Lock()
-	if y1 == 0 && y2 == size{
-		topHalo = b.InWorld[size-1]
-		bottomHalo = b.InWorld[0]
-	} else if y1 == 0 {
-		topHalo = b.InWorld[size-1]
-	} else if y2 == size {
-		bottomHalo = b.InWorld[0]
-	} else {
-		topHalo = b.InWorld[y1-1]
-		bottomHalo = b.InWorld[y2] //y2 is exclusive
-	}
+	topHalo = b.InWorld[topRowNum]
+	botHalo = b.InWorld[botRowNum]
 	b.WorldsMut.Unlock()
 
-	return topHalo, bottomHalo
+	return topHalo, botHalo
 }
 
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
@@ -143,6 +137,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	b.WorldsMut.Lock()
 	b.InWorld = req.World ///deref currentworld in order to change its actual content to the new world
+	b.OutWorld = req.World // will be overwritten at the end, just needs to be allocated as the right size
 	b.WorldsMut.Unlock()
 
 	b.Params = req.Params
@@ -160,7 +155,9 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	workers := takeWorkers(b)
 	// workers := b.Workers
 
-	if len(workers) == 0 { return } //let client know that there are no workers available
+	if len(workers) == 0 {
+		return
+	} //let client know that there are no workers available
 
 	for workerId := 0; workerId < len(workers); workerId++ {
 		//connect to the worker
@@ -179,12 +176,19 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		below := workers[lastId].Ip
 		worker := &workers[workerId]
 		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
+		topHalo, bottomHalo := b.getHalos(y1, y2)
+		sliceWithHalos := append(append([][]uint8{topHalo}, b.InWorld[y1:y2]...), bottomHalo)
+
+		for _, row := range sliceWithHalos {
+			fmt.Println(len(row))
+		}
 
 		setupReq := stubs.SetupRequest{
 			ID: workerId,
-			Slice: b.InWorld[y1:y2], //this needs to include the ghost rows
+			Offset: y1 - 1,
+			Slice: sliceWithHalos, //this now includes the ghost rows in the right place
 			Params: b.Params,
-			Above: above,
+			Above: above, //who we ask for the top
 			//in-between: this slice
 			Below: below,
 		}
@@ -195,6 +199,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			fmt.Println("Error workers could not find each other!")
 			os.Exit(1)
 		}
+		fmt.Println(worker.Ip, "set up successfully")
 	}
 
 	noWorkers := len(b.Workers)
@@ -202,21 +207,19 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	out := make(chan *stubs.Response, b.Threads)
 
 	if b.Params.Turns == 0 {
-
 		b.getAliveCells(workers)
 		res.Alive = b.Alive
 		res.Turns = b.Turns
 		res.World = req.World
 		return
 	}
-	fmt.Println(workers)
 	i := 0
 
 	turnResponses := make([]stubs.Response, noWorkers)
 	//send a turn request to each worker selected
 	for workerId := 0; workerId < len(workers); workerId++ {
 		worker := &workers[workerId]
-		turnReq := stubs.Request{Params: req.Params, World:}
+		turnReq := stubs.Request{Params: req.Params}
 		//receive response when ready (in any order) via the out channel
 		go func(){
 			turnRes := new(stubs.Response)
@@ -226,6 +229,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 				handleError(err)
 			}
 			// <-done
+			fmt.Println(turnRes)
 			out <- turnRes
 		}()
 	}
@@ -237,15 +241,17 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	}
 
 	b.Alive = make([]util.Cell, 0)
-	rowNum := 0
+	row := 0
 	b.WorldsMut.Lock()
-	for _, response := range turnResponses {
-		slice := response.Slice
-		for _, row := range slice {
-			b.OutWorld[rowNum] = row
-			rowNum++
+	for k, _ := range turnResponses {
+		workerResp := turnResponses[k].Slice
+		//fmt.Println(workerResp)
+		for j, _ := range workerResp {
+			b.OutWorld[row] = workerResp[j]
+			fmt.Println(workerResp[j])
+			row++
 		}
-
+		fmt.Println("---------------------------")
 	}
 	// b.alternateWorld()
 	res.Turns++

@@ -193,6 +193,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	brokerReq := stubs.NewClientRequest{World: world, Params: params}
 	brokerRes := new(stubs.NewClientResponse)
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
+	fmt.Println("Broker finished!")
 	//for _, row := range brokerRes.World {
 	//	fmt.Println(row)
 	//}

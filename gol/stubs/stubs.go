@@ -16,6 +16,7 @@ type EmptyResponse struct{}
 var SetupHandler = "Gol.Setup"
 type SetupRequest struct {
 	ID int
+	Offset int //the row our active slice starts in the image
 	Slice [][]uint8
 	Params Params
 	Above string //ip address and port
@@ -37,6 +38,7 @@ type HaloSetupRequest struct {
 
 var GetHaloHandler = "Gol.GetHaloRow"
 type HaloRequest struct {
+	CallerID int
 	Top bool
 }
 type HaloResponse struct {
@@ -46,9 +48,7 @@ type HaloResponse struct {
 var TurnsHandler = "Gol.TakeTurns"
 type Request struct {
 	Params Params
-	World [][]uint8 //whole world
 }
-
 type Response struct {
 	ID int
 	Slice [][]uint8 //final strip
