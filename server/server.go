@@ -540,7 +540,6 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	res.Slice = g.Slice.Read[active.Top:active.Bottom+1] //remove non-active stale ghost/halo rows (need to add one as exclusive)
 	fmt.Println("SLICEOUT IS", len(res.Slice), "LONG")
 	//showMatrix(res.Slice)
-
 	res.Turn = g.Turn
 	res.Alive = g.aliveStrip(g.ReadOnlySlice)
 	res.ID = g.ID
@@ -571,16 +570,11 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
 
-	g.WorldMut.Lock()
-	g.TurnMut.Lock()
-	//if g.Params.Turns == 0 {
-	//	res.Alive = g.calculateAliveCells(g.Params, g.ReadOnlySlice)
-	//} else {
-	res.Alive = g.aliveStrip(g.ReadOnlySlice)
-	//}
+	g.WorldMut.Lock(); defer g.WorldMut.Unlock()
+	g.TurnMut.Lock(); defer g.TurnMut.Unlock()
+  res.Alive = g.aliveStrip(g.ReadOnlySlice)
+  
 	res.OnTurn = g.Turn
-	g.TurnMut.Unlock()
-	g.WorldMut.Unlock()
 
 	return
 }

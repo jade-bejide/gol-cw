@@ -56,6 +56,7 @@ type Response struct {
 	Alive []util.Cell //alive cells to report to distributor events
 }
 
+var BrokerAliveHandler = "Broker.ReportAlive"
 var AliveHandler = "Gol.ReportAlive"
 //EmptyRequest
 type AliveResponse struct {

@@ -66,7 +66,7 @@ func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
 			res := new(stubs.AliveResponse)
 			//func (client *Client) Go(serviceMethod string, args any, reply any, done chan *Call) *Call
 
-			broker.Call(stubs.AliveHandler, req, res)
+			broker.Call(stubs.BrokerAliveHandler, req, res)
 			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: len(res.Alive)}
 		}
 	}

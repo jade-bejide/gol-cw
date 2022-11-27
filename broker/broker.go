@@ -65,6 +65,9 @@ type Broker struct {
 	Workers []Worker //have 16 workers by default, as this is the max size given in tests
 	Params stubs.Params
 	Alive []util.Cell
+	AliveMut sync.Mutex
+	AliveTurn int
+	AliveTurnMut sync.Mutex
 }
 
 func handleError(err error) {
@@ -73,9 +76,6 @@ func handleError(err error) {
 	}
 }
 
-func distributeWork() {
-
-}
 
 func takeWorkers(b *Broker) []Worker {
 	threads := b.Threads
@@ -107,11 +107,19 @@ func (b *Broker) getAliveCells(workers []Worker) {
 	}
 }
 
+//connect to the workers in a loop
 func (b *Broker) setUpWorkers() {
 	b.Workers = make([]Worker, b.Threads)
 	for i := 0; i < b.Threads; i++ {
 		b.Workers[i].Ip = "localhost:"+strconv.Itoa(8032+i)
+
+		
+		client, err := rpc.Dial("tcp", b.Workers[i].Ip)
+
+		handleError(err)
+		b.Workers[i].Connection = client
 	}
+
 }
 
 func (b *Broker) getHalos(y1 int, y2 int) ([]byte, []byte) {
@@ -160,7 +168,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	b.Threads = req.Params.Threads
 
 	b.setUpWorkers()
-	fmt.Println(b.Workers)
 
 	b.TurnsMut.Lock()
 	b.Turns = req.Params.Turns
@@ -168,21 +175,13 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	//send work to the gol workers
 	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
-	workers := takeWorkers(b)
-	// workers := b.Workers
+	// workers := takeWorkers(b)
+	workers := b.Workers
 
 	if len(workers) == 0 {
 		return
 	} //let client know that there are no workers available
 
-	for workerId := 0; workerId < len(workers); workerId++ {
-		//connect to the worker
-		client, err := rpc.Dial("tcp", workers[workerId].Ip)
-
-		handleError(err)
-		workers[workerId].Connection = client
-
-	}
 
 
 	for workerId := 0; workerId < len(workers); workerId++ {
@@ -229,6 +228,8 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		res.World = req.World
 		return
 	}
+	i := 0
+  
 	i := 0
 
 	turnResponses := make([]stubs.Response, noWorkers)
@@ -282,27 +283,24 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	res.World = b.OutWorld
 
-
+	b.AliveMut.Lock()
+	res.Alive, _ = b.getAliveCells(workers)
+	b.AliveMut.Unlock()
 
 	//close the workers after we're finished
 	for _, worker := range workers {
 		worker.Connection.Close()
 	}
 
-	res.Alive = b.Alive
-
-
 	return
 }
 
 func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
-	b.WorldsMut.Lock()
-	b.TurnsMut.Lock()
+	
+	b.AliveMut.Lock(); defer b.AliveMut.Unlock()
+	b.AliveTurnMut.Lock(); defer b.AliveTurnMut.Unlock()
 	res.Alive = b.Alive
-	res.OnTurn = b.Turns
-	b.TurnsMut.Lock()
-	b.WorldsMut.Unlock()
-
+	res.OnTurn = b.AliveTurn
 	return
 }
 
@@ -312,8 +310,6 @@ func main() {
 	pAddr := flag.String("port", "8031", "Port to listen on")
 	flag.Parse()
 
-
-
 	rpc.Register(&Broker{})
 	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
 	fmt.Println("Listening on ", *pAddr)
@@ -321,5 +317,6 @@ func main() {
 	handleError(err)
 	defer listener.Close()
 	rpc.Accept(listener)
+	broker.setUpWorkers()
 
 }
