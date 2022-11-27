@@ -10,7 +10,6 @@ import (
 	"net/rpc"
 	_ "net/rpc"
 	"sync"
-	"time"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -441,10 +440,19 @@ func (g *Gol) GetHaloRow(req stubs.HaloRequest, res *stubs.HaloResponse) (err er
 //}
 
 func showMatrix(m [][]uint8) {
-	for _, row := range m {
-		fmt.Println(row)
-	}
-	return
+	//for _, row := range m {
+	//	for _, elem := range row {
+	//		var str string
+	//		if elem == 255 {
+	//			str = "##"
+	//		}else{
+	//			str = "[]"
+	//		}
+	//		fmt.Printf("%s", str)
+	//	}
+	//	fmt.Println("")
+	//}
+	//return
 }
 
 func writeIntoSlice(src, dst []uint8){
@@ -476,10 +484,10 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 		g.TurnMut.Unlock()
 
 		if (g.ID + 2) % 2 == 0 {
-			fmt.Println("Waiting...")
+			fmt.Println("Waiting Initially...")
 			<-g.WaitForReadCh
 		}
-		fmt.Println("Steaming ahead!")
+		fmt.Println("Proceeding...")
 
 		//then we read from others
 		reqAbove := stubs.HaloRequest{Top: false, CallerID: g.ID}//want the first processed row, not the outdated halo
@@ -495,10 +503,11 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 
 		<-g.WaitForReadCh //makes sure the node that depends on me can read from me before i take off again
 		if (g.ID + 2) % 2 == 1 { //symmetrical extra receive from the other node that depend on it if odd
+			fmt.Println("Waiting Finally...")
 			<-g.WaitForReadCh
 		}
+		fmt.Println("Received both external reads, updating rows...")
 
-		time.Sleep(500 * time.Millisecond)
 		//write the new data into our slice
 		g.SliceMut.Lock()
 
@@ -507,8 +516,8 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 
 		g.SliceMut.Unlock()
 
-		fmt.Println(g.TopHalo)
-		fmt.Println(g.BottomHalo)
+		//fmt.Println(g.TopHalo)
+		//fmt.Println(g.BottomHalo)
 	}
 
 
