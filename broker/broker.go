@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -35,38 +36,38 @@ func spreadWorkload(h int, threads int) []int {
 }
 
 type ClientTask struct {
-	Client *rpc.Client
+	Client  *rpc.Client
 	Threads int
-	World [][]byte
-	Turns int
+	World   [][]byte
+	Turns   int
 }
 
 type Worker struct {
-	Ip string
-	Working bool
-	Lock sync.Mutex
+	Ip         string
+	Working    bool
+	Lock       sync.Mutex
 	Connection *rpc.Client
-	Done chan *rpc.Call
+	Done       chan *rpc.Call
 }
 
 type Broker struct {
-	Threads int
+	Threads   int
 	WorldsMut sync.Mutex
-	TurnsMut sync.Mutex
-	InWorld [][]uint8
-	OutWorld [][]uint8
+	TurnsMut  sync.Mutex
+	InWorld   [][]uint8
+	OutWorld  [][]uint8
 	// no longer needs to write the world to our struct
 	//WorldA [][]byte // this is an optimisation that reduces the number of memory allocations on each turn
 	//WorldB [][]byte // these worlds take turns to be the next world being written into
 	//IsCurrentA bool
 	//CurrentWorldPtr *[][]byte
 	//NextWorldPtr *[][]byte
-	Turns int
-	Workers []Worker //have 16 workers by default, as this is the max size given in tests
-	Params stubs.Params
-	Alive []util.Cell
-	AliveMut sync.Mutex
-	AliveTurn int
+	Turns        int
+	Workers      []Worker //have 16 workers by default, as this is the max size given in tests
+	Params       stubs.Params
+	Alive        []util.Cell
+	AliveMut     sync.Mutex
+	AliveTurn    int
 	AliveTurnMut sync.Mutex
 }
 
@@ -75,7 +76,6 @@ func handleError(err error) {
 		panic(err)
 	}
 }
-
 
 func takeWorkers(b *Broker) []Worker {
 	threads := b.Threads
@@ -91,7 +91,9 @@ func takeWorkers(b *Broker) []Worker {
 		}
 		worker.Lock.Unlock()
 
-		if totalworkers == threads { return workers }
+		if totalworkers == threads {
+			return workers
+		}
 	}
 
 	return make([]Worker, 0) //if not all workers are available, no workers are available
@@ -100,9 +102,9 @@ func takeWorkers(b *Broker) []Worker {
 func (b *Broker) getAliveCells(workers []Worker) {
 	//fmt.Println(b.Workers)
 	b.Alive = make([]util.Cell, 0)
-	for _, worker := range workers {
+	for i, _ := range workers {
 		aliveRes := new(stubs.AliveResponse)
-		worker.Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
+		workers[i].Connection.Call(stubs.AliveHandler, stubs.EmptyRequest{}, aliveRes)
 		b.Alive = append(b.Alive, aliveRes.Alive...)
 	}
 }
@@ -111,9 +113,8 @@ func (b *Broker) getAliveCells(workers []Worker) {
 func (b *Broker) setUpWorkers() {
 	b.Workers = make([]Worker, b.Threads)
 	for i := 0; i < b.Threads; i++ {
-		b.Workers[i].Ip = "localhost:"+strconv.Itoa(8032+i)
+		b.Workers[i].Ip = "localhost:" + strconv.Itoa(8032+i)
 
-		
 		client, err := rpc.Dial("tcp", b.Workers[i].Ip)
 
 		handleError(err)
@@ -144,7 +145,7 @@ func showMatrix(m [][]uint8) {
 			var str string
 			if elem == 255 {
 				str = "##"
-			}else{
+			} else {
 				str = "[]"
 			}
 			fmt.Printf("%s", str)
@@ -154,13 +155,13 @@ func showMatrix(m [][]uint8) {
 	return
 }
 
-func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
+func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	//threads
 	//world
 	//turns
 
 	b.WorldsMut.Lock()
-	b.InWorld = req.World ///deref currentworld in order to change its actual content to the new world
+	b.InWorld = req.World  ///deref currentworld in order to change its actual content to the new world
 	b.OutWorld = req.World // will be overwritten at the end, just needs to be allocated as the right size
 	b.WorldsMut.Unlock()
 
@@ -182,15 +183,14 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		return
 	} //let client know that there are no workers available
 
-
-
 	for workerId := 0; workerId < len(workers); workerId++ {
 		nextId := (workerId - 1 + len(workers)) % len(workers)
 		lastId := (workerId + 1 + len(workers)) % len(workers)
 		above := workers[nextId].Ip
 		below := workers[lastId].Ip
 		worker := &workers[workerId]
-		y1 := workSpread[workerId]; y2 := workSpread[workerId+1]
+		y1 := workSpread[workerId]
+		y2 := workSpread[workerId+1]
 		topHalo, bottomHalo := b.getHalos(y1, y2)
 		sliceWithHalos := append(append([][]uint8{topHalo}, b.InWorld[y1:y2]...), bottomHalo)
 
@@ -199,11 +199,11 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		}
 
 		setupReq := stubs.SetupRequest{
-			ID: workerId,
+			ID:     workerId,
 			Offset: y1 - 1,
-			Slice: sliceWithHalos, //this now includes the ghost rows in the right place
+			Slice:  sliceWithHalos, //this now includes the ghost rows in the right place
 			Params: b.Params,
-			Above: above, //who we ask for the top
+			Above:  above, //who we ask for the top
 			//in-between: this slice
 			Below: below,
 		}
@@ -228,7 +228,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		res.World = req.World
 		return
 	}
-	i := 0
 
 	turnResponses := make([]stubs.Response, noWorkers)
 	//send a turn request to each worker selected
@@ -236,7 +235,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		worker := &workers[workerId]
 		turnReq := stubs.Request{Params: req.Params}
 		//receive response when ready (in any order) via the out channel
-		go func(){
+		go func() {
 			turnRes := new(stubs.Response)
 			// done := make(chan *rpc.Call, 1)
 			err := worker.Connection.Call(stubs.TurnsHandler, turnReq, turnRes)
@@ -269,19 +268,17 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		fmt.Println("SLICE")
 	}
 	// b.alternateWorld()
-	res.Turns++
 	//reconstruct the world to go again
-
-	b.getAliveCells(workers)
 	b.WorldsMut.Unlock()
-	b.TurnsMut.Lock()
-	i++
-	b.TurnsMut.Unlock()
-
-
-	res.World = b.OutWorld
 
 	b.AliveMut.Lock()
+	b.getAliveCells(workers)
+	b.TurnsMut.Lock()
+	res.Turns = b.Turns
+	res.Alive = b.Alive
+	res.World = b.OutWorld
+	fmt.Println(b.Alive)
+	b.TurnsMut.Unlock()
 	b.AliveMut.Unlock()
 
 	//close the workers after we're finished
@@ -292,16 +289,16 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	return
 }
 
-func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
-	
-	b.AliveMut.Lock(); defer b.AliveMut.Unlock()
-	b.AliveTurnMut.Lock(); defer b.AliveTurnMut.Unlock()
+func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error) {
+
+	b.AliveMut.Lock()
+	defer b.AliveMut.Unlock()
+	b.AliveTurnMut.Lock()
+	defer b.AliveTurnMut.Unlock()
 	res.Alive = b.Alive
 	res.OnTurn = b.AliveTurn
 	return
 }
-
-
 
 func main() {
 	pAddr := flag.String("port", "8031", "Port to listen on")
