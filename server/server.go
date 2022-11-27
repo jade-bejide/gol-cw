@@ -240,6 +240,10 @@ type Gol struct {
 	TopHalo []uint8 //refers to first row of slice
 	BottomHalo []uint8 //refers to last row of slice
 
+	//for turn advertisation, they must be 0 buffered else it will allow the worker to take turns ahead of their co-workers
+	TopHaloAvailable chan bool //a new one written each turn
+	BottomHaloAvailable chan bool //a new one written each turn
+
 	WorkerAbove *rpc.Client
 	WorkerBelow *rpc.Client
 	WaitForReadCh chan bool //if there is something in this channel, its safe to read other nodes (dont block)
@@ -248,7 +252,10 @@ type Gol struct {
 	Done chan bool
 }
 
-
+func (g *Gol) advertiseTurnComplete() {
+	g.TopHaloAvailable <- true
+	g.BottomHaloAvailable <- true
+}
 
 //internal methods (safe setters)
 func (g *Gol) setParams(p stubs.Params){
@@ -319,6 +326,9 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	sliceSize := len(req.Slice)
 	g.TopHalo = req.Slice[0]
 	g.BottomHalo = req.Slice[sliceSize - 1] //by reference, so we need the mutex
+	g.TopHaloAvailable = make(chan bool, 0)
+	g.BottomHaloAvailable = make(chan bool, 0)
+
 	g.Slice = NewSwapSlice(g, req.Slice)
 	active = Active{
 		Top: 1, //getting rid of a row
@@ -470,14 +480,16 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 
 	for i := 0; i < req.Params.Turns; i++ {
 		//g.setWorld(req.World)
+		fmt.Println("____________ Turn", g.Turn, "____________")
 		g.SliceMut.Lock()
 		calculateNextStateHalo(g, g.Params, g.ReadOnlySlice)
 		g.Slice.setReadToWrite(g) //sets newly written g.Slice.Write to g.Slice.Read
-		fmt.Println("/////////////////// TURN", g.Turn, "///////////////////")
 		showMatrix(g.Slice.Read)
 		//showMatrix(g.Slice.Write)
 		// all following methods that depend on g.Slice must read from g.Slice.Read
 		g.SliceMut.Unlock()
+
+		g.advertiseTurnComplete() //blocks if nobody is trying to read our rows, blocks until somebody says they want to
 
 		g.TurnMut.Lock()
 		g.setTurn(g.Turn + 1)
