@@ -489,7 +489,7 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 		// all following methods that depend on g.Slice must read from g.Slice.Read
 		g.SliceMut.Unlock()
 
-		g.advertiseTurnComplete() //blocks if nobody is trying to read our rows, blocks until somebody says they want to
+		//g.advertiseTurnComplete() //blocks if nobody is trying to read our rows, blocks until somebody says they want to
 
 		g.TurnMut.Lock()
 		g.setTurn(g.Turn + 1)
