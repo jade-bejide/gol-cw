@@ -78,17 +78,14 @@ func countLiveNeighbours(p stubs.Params, x int, y int, worldReadOnly func(x, y i
 		return liveNeighbours
 	}
 
-func calculateNextStateHalo(g *Gol, p stubs.Params, worldReadOnly func(x, y int) uint8, y1 int, y2 int, turn int) {
-
-	height := y2 - y1
+func calculateNextStateHalo(g *Gol, p stubs.Params, worldReadOnly func(x, y int) uint8) {
 
 	g.Mut.Lock(); defer g.Mut.Unlock()
 	for x := 0; x < p.ImageWidth; x++ {
 		//fmt.Println("Column", x)
-		for y := y1; y < height; y++ {
-			yWorld := y + y1
-			neighbours := countLiveNeighbours(p, x, yWorld, worldReadOnly)
-			alive := isAlive(x, yWorld, worldReadOnly)
+		for y := active.Top; y <= active.Bottom; y++ { //inclusive by our definition of Active.Bottom
+			neighbours := countLiveNeighbours(p, x, y, worldReadOnly)
+			alive := isAlive(x, y, worldReadOnly)
 			alive = updateState(alive, neighbours)
 
 			if alive {
@@ -324,6 +321,11 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	g.TopHalo = req.Slice[0]
 	g.BottomHalo = req.Slice[sliceSize - 1] //by reference, so we need the mutex
 	g.Slice = NewSwapSlice(g, req.Slice)
+	active = Active{
+		Top: 1, //getting rid of a row
+		Bottom: sliceSize - 2, //going to zero index, then getting rid of a row
+		AliveOffset: req.Offset,
+	} //top and bottom index of the part we write to
 
 	fmt.Println("Setup SLICE IS", len(g.Slice.Read), "LONG")
 	showMatrix(g.Slice.Read)
@@ -335,12 +337,6 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	}
 
 	g.setParams(req.Params)
-
-	active = Active{
-		Top: 1, //getting rid of a row
-		Bottom: sliceSize - 2, //going to zero index, then getting rid of a row
-		AliveOffset: req.Offset,
-	} //top and bottom index of the part we write to
 
 	err = g.connectWorkers(req.Above, req.Below)
 	// fmt.Println(g.ID, g.Params, g.Slice)
@@ -467,7 +463,7 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error){
 	for i := 0; i < req.Params.Turns; i++ {
 		//g.setWorld(req.World)
 		g.SliceMut.Lock()
-		calculateNextStateHalo(g, g.Params, g.ReadOnlySlice, active.Top, active.Bottom, g.Turn)
+		calculateNextStateHalo(g, g.Params, g.ReadOnlySlice)
 		g.Slice.setReadToWrite(g) //sets newly written g.Slice.Write to g.Slice.Read
 		fmt.Println("/////////////////// TURN", g.Turn, "///////////////////")
 		showMatrix(g.Slice.Read)
