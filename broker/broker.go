@@ -229,8 +229,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		return
 	}
 	i := 0
-  
-	i := 0
 
 	turnResponses := make([]stubs.Response, noWorkers)
 	//send a turn request to each worker selected
@@ -284,7 +282,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	res.World = b.OutWorld
 
 	b.AliveMut.Lock()
-	res.Alive, _ = b.getAliveCells(workers)
 	b.AliveMut.Unlock()
 
 	//close the workers after we're finished
@@ -310,13 +307,14 @@ func main() {
 	pAddr := flag.String("port", "8031", "Port to listen on")
 	flag.Parse()
 
-	rpc.Register(&Broker{})
+	b := Broker{}
+	rpc.Register(&b)
 	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
 	fmt.Println("Listening on ", *pAddr)
 
 	handleError(err)
 	defer listener.Close()
 	rpc.Accept(listener)
-	broker.setUpWorkers()
+	b.setUpWorkers()
 
 }
