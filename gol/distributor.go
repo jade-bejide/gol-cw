@@ -6,6 +6,7 @@ import (
 	_ "sync"
 	"time"
 	_ "time"
+
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	//"uk.ac.bris.cs/gameoflife/util"
 )
@@ -49,9 +50,6 @@ const aliveCellsPollDelay = 2 * time.Second
 // 	return splits
 // }
 
-
-
-
 //we only ever need write to events, and read from turns
 func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
 	//newRound :=
@@ -88,7 +86,7 @@ func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentW
 	c.events <- ImageOutputComplete{CompletedTurns: currentTurn, Filename: filename}
 }
 
-func finishServer(client *rpc.Client){
+func finishServer(client *rpc.Client) {
 	err := client.Call(stubs.FinishHander, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
 	if err != nil {
 		fmt.Printf("Error client couldn't Finish server %s\n", err)
@@ -176,14 +174,14 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	//killServer := make(chan bool, 1)
 	//go handleKeyPresses(p, c, client, keyPresses, killServer)
 	//
-    //req := stubs.Request{World: world, Params: stubs.Params(p)}
-    //res := new(stubs.Response)
+	//req := stubs.Request{World: world, Params: stubs.Params(p)}
+	//res := new(stubs.Response)
 	//
 	done := make(chan bool)
 	go ticks(c, client, done)
 	//
 	//remoteDone := make(chan *rpc.Call, 1)
-    //call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
+	//call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
 
 	//var alive []util.Cell
 	//var turns int
@@ -193,6 +191,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	brokerReq := stubs.NewClientRequest{World: world, Params: params}
 	brokerRes := new(stubs.NewClientResponse)
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
+	fmt.Println("Broker finished!")
 	//for _, row := range brokerRes.World {
 	//	fmt.Println(row)
 	//}

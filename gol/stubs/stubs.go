@@ -9,11 +9,6 @@ type Params struct {
 	ImageHeight int
 }
 
-type Slice struct {
-	From int //y coordinates
-	To int
-}
-
 type EmptyRequest struct {}
 type EmptyResponse struct{}
 
@@ -21,23 +16,44 @@ type EmptyResponse struct{}
 var SetupHandler = "Gol.Setup"
 type SetupRequest struct {
 	ID int
-	Slice Slice
+	Offset int //the row our active slice starts in the image
+	Slice [][]uint8
 	Params Params
-	World [][]byte
+	Above string //ip address and port
+	Below string //ip address and port
+	IsAboveEven bool
+	IsBelowEven bool
 }
 type SetupResponse struct {
 	ID int
-	Slice Slice //identify yourselves
+	Success bool
 }
 
-var TurnHandler = "Gol.TakeTurn"
+var HaloSetupHandler = "Gol.HaloSetup"
+type HaloSetupRequest struct {
+	ID int
+	Params Params
+	//TopHalo []byte //these can be requested before each iteration
+	//BottomHalo []byte
+}
+//empty response
+
+var GetHaloHandler = "Gol.GetHaloRow"
+type HaloRequest struct {
+	CallerID int
+	Top bool
+}
+type HaloResponse struct {
+	Halo []uint8
+}
+
+var TurnsHandler = "Gol.TakeTurns"
 type Request struct {
-	World [][]uint8 //whole world
+	Params Params
 }
 type Response struct {
 	ID int
-	Strip [][]uint8 //final strip
-	Slice Slice
+	Slice [][]uint8 //final strip
 	Turn int //to report to distributor events
 	Alive []util.Cell //alive cells to report to distributor events
 }
