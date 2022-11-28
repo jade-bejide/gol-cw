@@ -294,9 +294,9 @@ func (g *Gol) GetHaloRow(req stubs.HaloRequest, res *stubs.HaloResponse) (err er
 	//fmt.Println("ID", req.CallerID, "asks GetHaloRow(); Top:", req.Top)
 	defer g.RequestedHalos.Done()
 	if req.Top {
-		res.Halo = g.Slice.Read[active.Top] //responds with the top of its writing-to slice (not /its/ halo rows)
+		res.Halo = <- g.TopHalosCh //responds with the top of its writing-to slice (not /its/ halo rows)
 	} else {
-		res.Halo = g.Slice.Read[active.Bottom] //bottom
+		res.Halo = <- g.BottomHalosCh  //bottom
 	}
 	fmt.Println("Serving Worker", req.CallerID, "the following slice where Top =", req.Top, ";", res.Halo)
 	return
@@ -343,7 +343,6 @@ func (g *Gol) requestHalos() ([]uint8, []uint8){
 }
 
 func sendHaloAndBlock(h []uint8, ch chan []uint8){
-	fmt.Println("ADVERTISING the following halo")
 	showMatrix([][]uint8{h})
 	ch <- h
 }
@@ -365,19 +364,19 @@ func (g *Gol) presentHalos() { //put rows on channels that block when facing odd
 }
 
 func showMatrix(m [][]uint8) {
-	for _, row := range m {
-		for _, elem := range row {
-			var str string
-			if elem == 255 {
-				str = "##"
-			} else {
-				str = "[]"
-			}
-			fmt.Printf("%s", str)
-		}
-		fmt.Println("")
-	}
-	return
+	//for _, row := range m {
+	//	for _, elem := range row {
+	//		var str string
+	//		if elem == 255 {
+	//			str = "##"
+	//		} else {
+	//			str = "[]"
+	//		}
+	//		fmt.Printf("%s", str)
+	//	}
+	//	fmt.Println("")
+	//}
+	//return
 }
 
 func writeIntoSlice(src, dst []uint8) {
@@ -434,19 +433,17 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error) {
 		g.TurnMut.Unlock()
 
 		g.RequestedHalos.Add(2) //we require EXACTLY 2 reads externally to fully complete before we progress
-		g.synchronise()
 
-		fmt.Println("Here 1!")
-		if g.IsIDEven { //if its not we present after we ask
+		// let ourselves be read from FIRST if even (may present only one halo with odd workers)
+		if g.IsIDEven {
 			//fmt.Println("Waiting to be read from by my odd peers")
 			g.presentHalos()
 		}
 
-		fmt.Println("Here 2!")
-		//then we read from others
+		// we read from others (straight away if odd)
 		above, below := g.requestHalos()
 
-		fmt.Println("Here 3!")
+		// present all our halos as odd
 		if !g.IsIDEven { //if its not we present after we ask
 			//fmt.Println("Waiting to be read from by my even peers")
 			g.presentHalos()
@@ -454,8 +451,6 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error) {
 
 		g.RequestedHalos.Wait() //if we do not wait here, we may end up writing to the data we return from GetHaloRow
 		g.synchronise()
-
-		//send acknowledge, wait for acknowledge
 
 		//write the new data into our slice
 		fmt.Println("Received:\nABOVE", above, "\nBELOW", below)
