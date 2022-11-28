@@ -89,7 +89,6 @@ func calculateNextStateHalo(g *Gol, p stubs.Params, worldReadOnly func(x, y int)
 	g.Slice.Mut.Lock(); defer g.Slice.Mut.Unlock()
 
 	for x := 0; x < p.ImageWidth; x++ {
-		//fmt.Println("Column", x)
 		for y := active.Top; y <= active.Bottom; y++ { //inclusive by our definition of Active.Bottom
 			neighbours := countLiveNeighbours(p, x, y, worldReadOnly)
 			alive := isAlive(x, y, worldReadOnly)
@@ -135,7 +134,6 @@ func copyEqualSizeSlice(src, dst [][]uint8) {
 	h := len(src)
 	for y := 0; y < h; y++ {
 		copy(dst[y], src[y])
-		showMatrix([][]uint8{(dst)[y]})
 	}
 }
 
@@ -159,22 +157,7 @@ func NewSwapSlice(g *Gol, s [][]uint8) *SwapSlice {
 }
 func (s *SwapSlice) setReadToWrite(g *Gol) {
 	s.Mut.Lock(); defer s.Mut.Unlock()
-
-	fmt.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-	fmt.Printf("~~~~~~~~~~~~~~Original:%d~~~~~~~~~~~~~\n", g.Turn)
-	showMatrix(s.Read)
-	//showMatrix(s.Write)
-	fmt.Println("~~~~~~~~~~~~~~COPY~~~~~~~~~~~~~~")
 	copyEqualSizeSlice(s.Write, s.Read)
-	fmt.Println("~~~~~~~~~~~~~~____~~~~~~~~~~~~~~")
-	//g.TopHalo = s.Read[0]
-	//g.BottomHalo = s.Read[len(g.Slice.Read) - 1]
-	showMatrix(s.Read)
-	fmt.Println("~~~~~~~~~~~~~~~Set~~~~~~~~~~~~~~")
-	//fmt.Println("TopHalo =", g.TopHalo)
-	//fmt.Println("BottomHalo =", g.BottomHalo)
-	//fmt.Printf("~~~~~~~~~~~~~~Index:%s~~~~~~~~~~~~\n", active.Bottom+1)
-	//showMatrix(s.Write)
 }
 
 type Gol struct {
@@ -258,8 +241,6 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	resetGol(g)
 	g.setID(req.ID)
 	g.IsIDEven = (req.ID + 2) % 2 == 0
-	//g.WaitForReadCh = make(chan bool, 1) //always buffer with 1 so rpc to add to it doesnt block
-	// fmt.Println(g.ID, req.ID)
 
 	sliceSize := len(req.Slice)
 
@@ -283,7 +264,6 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	err = g.connectWorkers(req.Above, req.Below)
 	g.IsAboveEven = req.IsAboveEven
 	g.IsBelowEven = req.IsBelowEven
-	// fmt.Println(g.ID, g.Params, g.Slice)
 
 	res.ID = req.ID
 	res.Success = err == nil
@@ -291,14 +271,13 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 }
 
 func (g *Gol) GetHaloRow(req stubs.HaloRequest, res *stubs.HaloResponse) (err error) {
-	//fmt.Println("ID", req.CallerID, "asks GetHaloRow(); Top:", req.Top)
+
 	defer g.RequestedHalos.Done()
 	if req.Top {
 		res.Halo = <- g.TopHalosCh //responds with the top of its writing-to slice (not /its/ halo rows)
 	} else {
 		res.Halo = <- g.BottomHalosCh  //bottom
 	}
-	fmt.Println("Serving Worker", req.CallerID, "the following slice where Top =", req.Top, ";", res.Halo)
 	return
 }
 
@@ -316,8 +295,6 @@ func (g *Gol) requestHalo(worker *rpc.Client) []uint8 {
 	if err != nil {
 		panic(err)
 	}
-	//fmt.Println("Recieved the following Halo asking a worker")
-	//showMatrix([][]uint8{resAbove.Halo})
 	return resAbove.Halo
 }
 
@@ -343,13 +320,11 @@ func (g *Gol) requestHalos() ([]uint8, []uint8){
 }
 
 func sendHaloAndBlock(h []uint8, ch chan []uint8){
-	showMatrix([][]uint8{h})
 	ch <- h
 }
 
 func (g *Gol) presentHalos() { //put rows on channels that block when facing odd workers
 	g.Slice.Mut.Lock(); defer g.Slice.Mut.Unlock()
-	fmt.Println(active.Top, active.Bottom)
 	if g.IsAboveEven && !g.IsBelowEven { //at the top of the image
 		// then we cant block and wait for it to read on the channel facing the even worker
 		sendHaloAndBlock(g.Slice.Read[active.Bottom], g.BottomHalosCh) // will block until odd has read it
@@ -357,26 +332,24 @@ func (g *Gol) presentHalos() { //put rows on channels that block when facing odd
 		sendHaloAndBlock(g.Slice.Read[active.Top], g.TopHalosCh)
 	} else {
 		sendHaloAndBlock(g.Slice.Read[active.Top], g.TopHalosCh)
-		fmt.Println("Presentation of TOP answered")
 		sendHaloAndBlock(g.Slice.Read[active.Bottom], g.BottomHalosCh)
-		fmt.Println("Presentation of BOTTOM answered")
 	}
 }
 
 func showMatrix(m [][]uint8) {
-	//for _, row := range m {
-	//	for _, elem := range row {
-	//		var str string
-	//		if elem == 255 {
-	//			str = "##"
-	//		} else {
-	//			str = "[]"
-	//		}
-	//		fmt.Printf("%s", str)
-	//	}
-	//	fmt.Println("")
-	//}
-	//return
+	for _, row := range m {
+		for _, elem := range row {
+			var str string
+			if elem == 255 {
+				str = "##"
+			} else {
+				str = "[]"
+			}
+			fmt.Printf("%s", str)
+		}
+		fmt.Println("")
+	}
+	return
 }
 
 func writeIntoSlice(src, dst []uint8) {
@@ -420,11 +393,7 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error) {
 	runningCalls.Add(1)
 	defer runningCalls.Done()
 
-	////fmt.Println(g)
-
 	for i := 0; i < req.Params.Turns; i++ {
-		//g.setWorld(req.World)
-		//fmt.Println("____________ Turn", g.Turn, "____________")
 		calculateNextStateHalo(g, g.Params, g.ReadOnlySlice)
 		g.Slice.setReadToWrite(g) //sets newly written g.Slice.Write to g.Slice.Read
 
@@ -436,7 +405,6 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error) {
 
 		// let ourselves be read from FIRST if even (may present only one halo with odd workers)
 		if g.IsIDEven {
-			//fmt.Println("Waiting to be read from by my odd peers")
 			g.presentHalos()
 		}
 
@@ -445,7 +413,6 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error) {
 
 		// present all our halos as odd
 		if !g.IsIDEven { //if its not we present after we ask
-			//fmt.Println("Waiting to be read from by my even peers")
 			g.presentHalos()
 		}
 
@@ -453,30 +420,21 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error) {
 		g.synchronise()
 
 		//write the new data into our slice
-		fmt.Println("Received:\nABOVE", above, "\nBELOW", below)
 		g.Slice.Mut.Lock()
 		writeIntoSlice(above, g.Slice.Read[0])
 		writeIntoSlice(below, g.Slice.Read[len(g.Slice.Read) - 1])
 		g.Slice.Mut.Unlock()
 
-		////fmt.Println(g.TopHalo)
-		////fmt.Println(g.BottomHalo)
 	}
 
 	g.Mut.Lock()
 
-	//showMatrix(g.Slice.Read)
-
 	res.Slice = g.Slice.Read[active.Top : active.Bottom+1] //remove non-active stale ghost/halo rows (need to add one as exclusive)
-	//fmt.Println("SLICEOUT IS", len(res.Slice), "LONG")
-	//showMatrix(res.Slice)
 	res.Turn = g.Turn
 	res.Alive = g.aliveStrip(g.ReadOnlySlice)
 	res.ID = g.ID
 
 	g.Mut.Unlock()
-
-	//fmt.Println("IM ALL DONE!!")
 
 	return
 }

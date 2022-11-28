@@ -194,10 +194,6 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 		topHalo, bottomHalo := b.getHalos(y1, y2)
 		sliceWithHalos := append(append([][]uint8{topHalo}, b.InWorld[y1:y2]...), bottomHalo)
 
-		for _, row := range sliceWithHalos {
-			fmt.Println(len(row))
-		}
-
 		setupReq := stubs.SetupRequest{
 			ID:     workerId,
 			Offset: y1 - 1,
@@ -262,12 +258,10 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 	for k, _ := range turnResponses {
 		workerResp := turnResponses[k].Slice
 		showMatrix(workerResp)
-		//fmt.Println(workerResp)
 		for j, _ := range workerResp {
 			b.OutWorld[row] = workerResp[j]
 			row++
 		}
-		fmt.Println("SLICE")
 	}
 	// b.alternateWorld()
 	//reconstruct the world to go again
@@ -279,7 +273,6 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 	res.Turns = b.Turns
 	res.Alive = b.Alive
 	res.World = b.OutWorld
-	fmt.Println(b.Alive)
 	b.TurnsMut.Unlock()
 	b.AliveMut.Unlock()
 
