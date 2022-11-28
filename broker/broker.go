@@ -184,10 +184,10 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 	} //let client know that there are no workers available
 
 	for workerId := 0; workerId < len(workers); workerId++ {
-		nextId := (workerId - 1 + len(workers)) % len(workers)
-		lastId := (workerId + 1 + len(workers)) % len(workers)
-		above := workers[nextId].Ip
-		below := workers[lastId].Ip
+		aboveID := (workerId - 1 + len(workers)) % len(workers)
+		belowID := (workerId + 1 + len(workers)) % len(workers)
+		above := workers[aboveID].Ip
+		below := workers[belowID].Ip
 		worker := &workers[workerId]
 		y1 := workSpread[workerId]
 		y2 := workSpread[workerId+1]
@@ -206,6 +206,8 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 			Above:  above, //who we ask for the top
 			//in-between: this slice
 			Below: below,
+			IsAboveEven: (aboveID + 2) % 2 == 0,
+			IsBelowEven: (belowID + 2) % 2 == 0,
 		}
 		setupRes := new(stubs.SetupResponse)
 		err = worker.Connection.Call(stubs.SetupHandler, setupReq, setupRes)

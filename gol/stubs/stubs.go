@@ -21,6 +21,8 @@ type SetupRequest struct {
 	Params Params
 	Above string //ip address and port
 	Below string //ip address and port
+	IsAboveEven bool
+	IsBelowEven bool
 }
 type SetupResponse struct {
 	ID int

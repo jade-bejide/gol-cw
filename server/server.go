@@ -252,8 +252,9 @@ type Gol struct {
 	WorldMut sync.Mutex
 	TurnMut  sync.Mutex
 
-	Params stubs.Params
-	ID     int
+	Params   stubs.Params
+	ID       int
+	IsIDEven bool
 
 	SliceMut sync.Mutex //will need locking on access to slice, OR top/bottom halo (reference tie-ins)
 	//Slice [][]uint8 //active part of the slice is all but the first and last row
@@ -263,20 +264,17 @@ type Gol struct {
 	BottomHalo    []uint8 //refers to last row of slice
 
 	//for turn advertisation, they must be 0 buffered else it will allow the worker to take turns ahead of their co-workers
-	TopHaloAvailable    chan bool //a new one written each turn
-	BottomHaloAvailable chan bool //a new one written each turn
+	TopHalosCh    chan []uint8
+	BottomHalosCh chan []uint8
 
-	WorkerAbove   *rpc.Client
-	WorkerBelow   *rpc.Client
-	WaitForReadCh chan bool //if there is something in this channel, its safe to read other nodes (dont block)
+	WorkerAbove *rpc.Client
+	WorkerBelow *rpc.Client
+	IsAboveEven bool
+	IsBelowEven bool
+	//WaitForReadCh chan bool //if there is something in this channel, its safe to read other nodes (dont block)
 
-	Turn int
-	Done chan bool
-}
-
-func (g *Gol) advertiseTurnComplete() {
-	g.TopHaloAvailable <- true
-	g.BottomHaloAvailable <- true
+	Turn         int
+	Done         chan bool
 }
 
 //internal methods (safe setters)
@@ -315,24 +313,6 @@ func (g *Gol) setID(id int) {
 	g.ID = id
 }
 
-//func (g *Gol) setStrip() (err error){ //depends entirely on slice, this means it can return errors
-//	g.Mut.Lock(); defer g.Mut.Unlock()
-//	if g.Slice.To == 0 && g.Slice.From == 0 {
-//		return errors.New("Slice is nil")
-//	}
-//	if g.Params.ImageWidth == 0 {
-//		return errors.New("Params is nil")
-//	}
-//
-//	subStrip := make([][]uint8, g.Slice.To - g.Slice.From)
-//	for i := range subStrip {
-//		subStrip[i] = make([]uint8, g.Params.ImageWidth)
-//	}
-//
-//	g.Strip = subStrip
-//	return
-//}
-
 func (g *Gol) connectWorkers(above, below string) (err error) {
 	fmt.Println("Dialing above", above, "and below", below)
 	g.WorkerAbove, err = rpc.Dial("tcp", above)
@@ -348,14 +328,15 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 
 	resetGol(g)
 	g.setID(req.ID)
-	g.WaitForReadCh = make(chan bool, 1) //always buffer with 1 so rpc to add to it doesnt block
+	g.IsIDEven = (req.ID + 2) % 2 == 0
+	//g.WaitForReadCh = make(chan bool, 1) //always buffer with 1 so rpc to add to it doesnt block
 	// fmt.Println(g.ID, req.ID)
 
 	sliceSize := len(req.Slice)
 	g.TopHalo = req.Slice[0]
 	g.BottomHalo = req.Slice[sliceSize-1] //by reference, so we need the mutex
-	g.TopHaloAvailable = make(chan bool, 0)
-	g.BottomHaloAvailable = make(chan bool, 0)
+	g.TopHalosCh = make(chan []uint8, 0)
+	g.BottomHalosCh = make(chan []uint8, 0)
 
 	g.Slice = NewSwapSlice(g, req.Slice)
 	active = Active{
@@ -365,7 +346,7 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	} //top and bottom index of the part we write to
 
 	fmt.Println("Setup SLICE IS", len(g.Slice.Read), "LONG")
-	showMatrix(g.Slice.Read)
+	//showMatrix(g.Slice.Read)
 
 	g.ReadOnlySlice = func(x, y int) uint8 {
 		//fmt.Println("Closure: SLICE IS", len(g.Slice.Read), "LONG")
@@ -376,6 +357,8 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	g.setParams(req.Params)
 
 	err = g.connectWorkers(req.Above, req.Below)
+	g.IsAboveEven = req.IsAboveEven
+	g.IsBelowEven = req.IsBelowEven
 	// fmt.Println(g.ID, g.Params, g.Slice)
 
 	res.ID = req.ID
@@ -383,89 +366,83 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	return
 }
 
-////Joins halos and strip together to get a world
-//func (g *Gol) combineWorld(topHalo []byte, bottomHalo []byte) {
-//	g.Mut.Lock(); defer g.Mut.Unlock()
-//	g.World = make([][]uint8, 0)
-//
-//	g.World = append(g.World, topHalo)
-//
-//	for _, row := range g.Strip {
-//		g.World = append(g.World, row)
+//func (g *Gol) lockOnParity() {
+//	if (g.ID+2)%2 == 0 {
+//		fmt.Println("Block on channel on turn", g.Turn)
+//		<-g.WaitForReadCh //taketurns will block on this lock until it has been read from, if it is even
 //	}
-//
-//	g.World = append(g.World, bottomHalo)
-//}
-
-//func (g *Gol) HaloSetup(req stubs.HaloSetupRequest, res *stubs.SetupResponse) (err error) {
-//	runningCalls.Add(1); defer runningCalls.Done()
-//
-//	resetGol(g)
-//	g.setID(req.ID)
-//	g.setSlice(req.Slice)
-//	g.setParams(req.Params)
-//	err = g.setStrip()
-//
-//	if err != nil { return err }
-//
-//	g.combineWorld(req.TopHalo, req.BottomHalo) //generate subworld from strip and halos
-//	res.Slice = req.Slice
-//
 //	return
 //}
-////
-//func (g *Gol) HaloTakeTurn(req stubs.HaloRequest, res *stubs.Response) (err error) {
-//	runningCalls.Add(1); defer runningCalls.Done()
-//
-//
-//		//g.combineWorld(req.TopHalo, req.BottomHalo)
-//		excludeTopRow := 1
-//		excluseBotRow := len(g.Slice) - 1
-//
-//		worldReadOnly := func(x, y int) uint8{
-//			return g.Slice[y][x]
-//		}
-//
-//		calculateNextStateHalo(g, g.Params, /*_,*/ worldReadOnly, excludeTopRow, excluseBotRow, g.Turn)
-//
-//		g.TurnMut.Lock()
-//		g.setTurn(g.Turn + 1)
-//		g.TurnMut.Unlock()
-//
-//		g.Mut.Lock()
-//		res.ID = g.ID
-//		res.Strip = g.Strip
-//		res.Slice = g.Slice
-//		res.Turn = g.Turn
-//		res.Alive = g.aliveStrip()
-//
-//		g.Mut.Unlock()
-//
-//	return
-//}
-
-func (g *Gol) lockOnParity() {
-	if (g.ID+2)%2 == 0 {
-		fmt.Println("Block on channel on turn", g.Turn)
-		<-g.WaitForReadCh //taketurns will block on this lock until it has been read from, if it is even
-	}
-	return
-}
 
 func (g *Gol) GetHaloRow(req stubs.HaloRequest, res *stubs.HaloResponse) (err error) {
 	fmt.Println("ID", req.CallerID, "asks GetHaloRow(); Top:", req.Top)
-	//if (g.ID + 2) % 2 == 0 {
-	defer func() {
-		g.WaitForReadCh <- true
-	}()
-	//}
 	if req.Top {
-		res.Halo = g.Slice.Read[active.Top] //responds with the top of its writing-to slice (not /its/ halo rows)
+		res.Halo = <- g.TopHalosCh //responds with the top of its writing-to slice (not /its/ halo rows)
 	} else {
-		res.Halo = g.Slice.Read[active.Bottom] //bottom
+		res.Halo = <- g.BottomHalosCh //bottom
 	}
 
 	return
+}
+
+func (g *Gol) requestHalo(worker *rpc.Client) []uint8 {
+	top := !(worker == g.WorkerAbove)
+	reqAbove := stubs.HaloRequest{Top: top, CallerID: g.ID} //want the first processed row, not the outdated halo
+	resAbove := new(stubs.HaloResponse)
+	err := worker.Call(stubs.GetHaloHandler, reqAbove, resAbove)
+	if err != nil {
+		panic(err)
+	}
+	return resAbove.Halo
+}
+
+func (g *Gol) requestHalos() ([]uint8, []uint8){
+	var aboveHalo []uint8
+	var belowHalo []uint8
+	if g.IsAboveEven && !g.IsBelowEven { //we're at the top of the image and g.ID=0
+		//send then receive
+		fmt.Println("sending")
+		sendHaloAndBlock(g.Slice.Read[active.Top], g.TopHalosCh)
+		fmt.Println("requesting")
+		aboveHalo = g.requestHalo(g.WorkerAbove)
+
+		belowHalo = g.requestHalo(g.WorkerBelow) //remaining call to odd worker
+	}else if g.IsBelowEven && !g.IsAboveEven{
+		//receive then send
+		fmt.Println("requesting")
+		belowHalo = g.requestHalo(g.WorkerBelow)
+		fmt.Println("sending")
+		sendHaloAndBlock(g.Slice.Read[active.Bottom], g.BottomHalosCh)
+
+		aboveHalo = g.requestHalo(g.WorkerAbove) //remaining call to odd worker
+	} else /* if g.IsAboveEven == g.IsBelowEven */ {
+		fmt.Println("requesting x2")
+		aboveHalo = g.requestHalo(g.WorkerAbove)
+		belowHalo = g.requestHalo(g.WorkerBelow)
+	}
+	return aboveHalo, belowHalo
+}
+
+func sendHaloAndGo(h []uint8, ch chan []uint8){
+	go func(){ ch <- h }()
+}
+
+func sendHaloAndBlock(h []uint8, ch chan []uint8){
+	ch <- h
+}
+
+func (g *Gol) presentHalos() { //put rows on channels that block when facing odd workers
+	if g.IsAboveEven && !g.IsBelowEven { //at the top of the image
+		// then we cant block and wait for it to read on the channel facing the even worker
+		sendHaloAndBlock(g.Slice.Read[active.Bottom], g.BottomHalosCh) // will block until odd has read it
+		//sendHaloAndBlock(g.Slice.Read[active.Top], g.TopHalosCh)
+	}else if g.IsBelowEven && !g.IsAboveEven {
+		sendHaloAndBlock(g.Slice.Read[active.Top], g.TopHalosCh)
+		//sendHaloAndBlock(g.Slice.Read[active.Bottom], g.BottomHalosCh)
+	} else {
+		sendHaloAndBlock(g.Slice.Read[active.Top], g.TopHalosCh)
+		sendHaloAndBlock(g.Slice.Read[active.Bottom], g.BottomHalosCh)
+	}
 }
 
 //func (g *Gol) UnlockIfEven(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
@@ -524,38 +501,31 @@ func (g *Gol) TakeTurns(req stubs.Request, res *stubs.Response) (err error) {
 		g.setTurn(g.Turn + 1)
 		g.TurnMut.Unlock()
 
-		if (g.ID+2)%2 == 0 {
-			fmt.Println("Waiting Initially...")
-			<-g.WaitForReadCh
+		if g.IsIDEven { //if its not we present after we ask
+			fmt.Println("Waiting to be read from by my odd peers")
+			g.presentHalos()
 		}
 		fmt.Println("Proceeding...")
 
 		//then we read from others
-		reqAbove := stubs.HaloRequest{Top: false, CallerID: g.ID} //want the first processed row, not the outdated halo
-		resAbove := new(stubs.HaloResponse)
-		reqBelow := stubs.HaloRequest{Top: true, CallerID: g.ID} //want the first processed row, not the outdated halo
-		resBelow := new(stubs.HaloResponse)
-		err = g.WorkerAbove.Call(stubs.GetHaloHandler, reqAbove, resAbove)
-		if err != nil {
-			panic(err)
-		}
-		err = g.WorkerBelow.Call(stubs.GetHaloHandler, reqBelow, resBelow)
-		if err != nil {
-			panic(err)
-		}
+		above, below := g.requestHalos()
 
-		<-g.WaitForReadCh    //makes sure the node that depends on me can read from me before i take off again
-		if (g.ID+2)%2 == 1 { //symmetrical extra receive from the other node that depend on it if odd
-			fmt.Println("Waiting Finally...")
-			<-g.WaitForReadCh
+		if !g.IsIDEven { //if its not we present after we ask
+			fmt.Println("Waiting to be read from by my even peers")
+			g.presentHalos()
 		}
+		//<-g.WaitForReadCh    //makes sure the node that depends on me can read from me before i take off again
+		//if (g.ID+2)%2 == 1 { //symmetrical extra receive from the other node that depend on it if odd
+		//	fmt.Println("Waiting Finally...")
+		//	<-g.WaitForReadCh
+		//}
 		fmt.Println("Received both external reads, updating rows...")
 
 		//write the new data into our slice
 		g.SliceMut.Lock()
 
-		writeIntoSlice(resAbove.Halo, g.TopHalo)
-		writeIntoSlice(resBelow.Halo, g.BottomHalo)
+		writeIntoSlice(above, g.TopHalo)
+		writeIntoSlice(below, g.BottomHalo)
 
 		g.SliceMut.Unlock()
 
