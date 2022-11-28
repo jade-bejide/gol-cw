@@ -47,6 +47,10 @@ type HaloResponse struct {
 	Halo []uint8
 }
 
+var AckHandler = "Gol.Ack"
+// empty request
+// empty response
+
 var TurnsHandler = "Gol.TakeTurns"
 type Request struct {
 	Params Params
