@@ -139,22 +139,6 @@ func (b *Broker) getHalos(y1 int, y2 int) ([]byte, []byte) {
 	return topHalo, botHalo
 }
 
-func showMatrix(m [][]uint8) {
-	for _, row := range m {
-		for _, elem := range row {
-			var str string
-			if elem == 255 {
-				str = "##"
-			} else {
-				str = "[]"
-			}
-			fmt.Printf("%s", str)
-		}
-		fmt.Println("")
-	}
-	return
-}
-
 func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	//threads
 	//world
@@ -241,7 +225,6 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 				handleError(err)
 			}
 			// <-done
-			fmt.Println(turnRes)
 			out <- turnRes
 		}()
 	}
@@ -257,7 +240,6 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 	b.WorldsMut.Lock()
 	for k, _ := range turnResponses {
 		workerResp := turnResponses[k].Slice
-		showMatrix(workerResp)
 		for j, _ := range workerResp {
 			b.OutWorld[row] = workerResp[j]
 			row++

@@ -282,7 +282,6 @@ func (g *Gol) GetHaloRow(req stubs.HaloRequest, res *stubs.HaloResponse) (err er
 }
 
 func (g *Gol) Ack(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error) {
-	fmt.Println("Recieved ACK")
 	g.Acknowledge <- true
 	return
 }
@@ -360,16 +359,16 @@ func writeIntoSlice(src, dst []uint8) {
 }
 
 func (g *Gol) synchronise() {
-	fmt.Println("Lets synchronise!")
+	//fmt.Println("Lets synchronise!")
 	if g.IsIDEven {
 		if !g.IsAboveEven {
-			fmt.Println("waiting 1")
+			//fmt.Println("waiting 1")
 			<-g.Acknowledge
 			//fmt.Println("waiting 1.5")
 			go g.WorkerAbove.Call(stubs.AckHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
 		} //wait for odd to request from us
 		if !g.IsBelowEven {
-			fmt.Println("waiting 2")
+			//fmt.Println("waiting 2")
 			<-g.Acknowledge
 			//fmt.Println("waiting 2.5")
 			go g.WorkerBelow.Call(stubs.AckHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
@@ -377,15 +376,17 @@ func (g *Gol) synchronise() {
 	}else{ //always expect two back as odd
 		//fmt.Println("waiting 3")
 		go g.WorkerAbove.Call(stubs.AckHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
-		fmt.Println("waiting 3")
+		//fmt.Println("waiting 3")
 		<-g.Acknowledge
 
 		//fmt.Println("waiting 4")
 		go g.WorkerBelow.Call(stubs.AckHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse))
-		fmt.Println("waiting 4")
+		//fmt.Println("waiting 4")
 		<-g.Acknowledge
 	}
-	fmt.Println("Synchronised!")
+	g.TurnMut.Lock()
+	fmt.Printf("Synchronised with neighbours on turn %d\n", g.Turn)
+	g.TurnMut.Unlock()
 }
 
 //RPC methods
