@@ -87,6 +87,7 @@ func handleError(err error) {
 	}
 }
 
+
 func takeWorkers(b *Broker) []Worker {
 	threads := b.Threads
 	workers := make([]Worker, 0)
@@ -369,6 +370,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		res.World = b.getCurrentWorld()
 		return
 	}
+
 
 	//send work to the gol workers
 	workSpread := spreadWorkload(b.Params.ImageHeight, b.Threads)
