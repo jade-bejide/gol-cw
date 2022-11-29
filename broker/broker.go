@@ -54,7 +54,6 @@ type Broker struct {
 	WorldsMut sync.Mutex
 	TurnsMut sync.Mutex
 	WorldA [][]byte // this is an optimisation that reduces the number of memory allocations on each turn
-	IsCurrentA bool
 	CurrentWorldPtr *[][]byte
 	Turns int
 	Workers []Worker //have 16 workers by default, as this is the max size given in tests
@@ -110,6 +109,7 @@ func (b *Broker) getCurrentWorld() [][]byte{
 	return *b.CurrentWorldPtr
 }
 
+
 func (b *Broker) getAliveCells(workers []Worker) ([]util.Cell, int) { //mutex locks aren't helpful here when seting global variabls of broker
 	//fmt.Println(b.Workers)
 	b.TurnsMut.Lock(); defer b.TurnsMut.Unlock() //sync with pause
@@ -123,7 +123,7 @@ func (b *Broker) getAliveCells(workers []Worker) ([]util.Cell, int) { //mutex lo
 		alive = append(alive, aliveRes.Alive...)
 		onTurn = aliveRes.OnTurn
 
-		// fmt.Println(onTurn)
+		fmt.Println(onTurn)
 	}
 
 	return alive, onTurn
@@ -272,9 +272,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			
 			b.WorldsMut.Lock()
 			b.CurrentWorldPtr = &b.WorldA
-			// b.NextWorldPtr = &b.WorldB
 			*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
-			// *b.NextWorldPtr = req.World // to be overwritten
 			b.WorldsMut.Unlock()
 		
 			b.Params = req.Params
@@ -298,9 +296,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	} else {
 		b.WorldsMut.Lock()
 		b.CurrentWorldPtr = &b.WorldA
-		// b.NextWorldPtr = &b.WorldB
 		*b.CurrentWorldPtr = req.World ///deref currentworld in order to change its actual content to the new world
-		// *b.NextWorldPtr = req.World // to be overwritten
 		b.WorldsMut.Unlock()
 	
 		b.Params = req.Params
@@ -378,7 +374,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 
 		rowNum := 0
-		//reconstruct the world to go again
+		
 		for _, response := range turnResponses {
 			strip := response.Strip
 			for rowIndex := 0; rowIndex < len(strip); rowIndex++ {
@@ -391,7 +387,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 		}
 		res.Turns++
-		
+		//reconstruct the world to go again
 
 		b.AliveMut.Lock()
 		b.AliveTurnMut.Lock()
@@ -399,6 +395,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		b.AliveMut.Unlock()
 		b.AliveTurnMut.Unlock()
 
+		// b.WorldsMut.Unlock()
 		b.TurnsMut.Lock()
 		i++
 		b.OnTurn = i
@@ -437,9 +434,8 @@ func main() {
 	pAddr := flag.String("port", "8031", "Port to listen on")
 	flag.Parse()
 	
-	
-	broker := Broker{}
-	rpc.Register(&broker)
+
+	rpc.Register(&Broker{})
 	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
 	fmt.Println("Listening on ", *pAddr)
 	
@@ -447,6 +443,7 @@ func main() {
 	
 	go rpc.Accept(listener)
 	fmt.Println("Setting up workers")
+	// broker.setUpWorkers()
 	fmt.Println("Set up workers")
 
 	fmt.Println("Dying...")
