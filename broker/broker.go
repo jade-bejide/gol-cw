@@ -9,10 +9,13 @@ import (
 	"strconv"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
+	"strings"
 )
 
 var kill = make(chan bool, 1)
+var finishTurns = make(chan bool, 1) //to safely quit the Gol for loop
 var runningCalls = sync.WaitGroup{}
+var workerIPs []string
 
 func spreadWorkload(h int, threads int) []int {
 	splits := make([]int, threads+1)
@@ -158,19 +161,32 @@ func (b *Broker) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err
 
 
 //connect to the workers in a loop
-func (b *Broker) setUpWorkers() {
+func (b *Broker) setUpWorkers() (issue string) {
 	b.Workers = make([]Worker, b.Threads)
 	for i := 0; i < b.Threads; i++ {
+		fmt.Println("Loop")
 		b.Workers[i].Lock.Lock()
 		b.Workers[i].Ip = "localhost:"+strconv.Itoa(8032+i)
+		b.Workers[i].Ip = workerIPs[i];
 
-		
+
+		fmt.Println("Dials", workerIPs[i])
 		client, err := rpc.Dial("tcp", b.Workers[i].Ip)
 
 		handleError(err)
+		if err != nil {
+			b.Workers[i].Lock.Unlock()
+			fmt.Println("Failed to dial")
+			issue = err.Error()
+			return
+		}
+
+		//handleError(err)
 		b.Workers[i].Connection = client
 		b.Workers[i].Lock.Unlock()
 	}
+
+	return
 }
 
 func (b *Broker) getCurrentAliveCells() []util.Cell {
@@ -188,13 +204,15 @@ func (b *Broker) getTurn() int {
 func (b *Broker) KillBroker(req stubs.EmptyRequest, res *stubs.KillBrokerResponse) (err error) {
 	runningCalls.Add(1); defer runningCalls.Done()
 
+	
 	b.WorldsMut.Lock(); b.TurnsMut.Lock();
+	finishTurns <- true
 	for workerId := 0; workerId < b.Threads; workerId++ {
 		b.Workers[workerId].Lock.Lock()
 
 		fmt.Println("Attempting to kill worker", workerId)
-		err := b.Workers[workerId].Connection.Call(stubs.KillHandler, stubs.EmptyRequest{}, &stubs.EmptyResponse{})
-		handleError(err)
+		b.Workers[workerId].Connection.Call(stubs.KillHandler, stubs.EmptyRequest{}, &stubs.EmptyResponse{})
+		// handleError(err)
 		b.Workers[workerId].Connection.Close()
 		fmt.Println("Killed worker", workerId)
 
@@ -207,6 +225,7 @@ func (b *Broker) KillBroker(req stubs.EmptyRequest, res *stubs.KillBrokerRespons
 	b.WorldsMut.Unlock(); b.TurnsMut.Unlock()
 
 	kill <- true
+	
 	fmt.Println("Set to close when ready")
 	return
 }
@@ -249,7 +268,7 @@ func (b *Broker) wakeUp() {
 }
 
 func (b *Broker) setCurrentWorldRow(rowIndex int, row []byte) {
-	b.WorldsMut.Lock(); defer b.WorldsMut.Unlock()
+	// b.WorldsMut.Lock(); defer b.WorldsMut.Unlock()
 	(*b.CurrentWorldPtr)[rowIndex] = row
 }
 
@@ -259,12 +278,26 @@ func (b *Broker) getCurrentTurn() int {
 	return b.OnTurn
 }
 
+func (b *Broker) checkWorkerAddresses(threads int) (issue string) {
+	//fmt.Println("what")
+
+	if threads != len(workerIPs) {
+		//fmt.Println("not enough worker addresses")
+		return "not enough addresses"
+	}
+
+	//fmt.Println("workers set up")
+	issue = b.setUpWorkers()
+	return issue
+}
+
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	runningCalls.Add(1); defer runningCalls.Done()
 	var i int
 
 
 	b.brokerDebug()
+
 	if b.Idle { 
 		b.wakeUp()
 
@@ -277,9 +310,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		
 			b.Params = req.Params
 			b.Threads = req.Params.Threads
-		
-			b.setUpWorkers()
-		
+
 			b.TurnsMut.Lock()
 			b.Turns = req.Params.Turns
 			b.TurnsMut.Unlock()
@@ -288,7 +319,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 			i = 0
 		} else { 
-			b.setUpWorkers()
 
 			fmt.Println("Continuing")
 			i = b.getCurrentTurn()
@@ -302,8 +332,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		b.Params = req.Params
 		b.Threads = req.Params.Threads
 	
-		b.setUpWorkers()
-	
 		b.TurnsMut.Lock()
 		b.Turns = req.Params.Turns
 		b.TurnsMut.Unlock()
@@ -311,6 +339,16 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 
 		i = 0
+	}
+
+
+	issue := b.checkWorkerAddresses(req.Params.Threads)
+	if(issue != ""){
+		fmt.Println("Error checking workers & addresses:", issue)
+		res.Alive = []util.Cell{}
+		res.Turns = -1
+		res.World = [][]uint8{}
+		return
 	}
 
 
@@ -347,59 +385,66 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	}
 
 
-	
 
-	
-	for i < b.Turns {
-		turnResponses := make([]stubs.Response, noWorkers)
-		//send a turn request to each worker selected
-		for workerId := 0; workerId < b.Threads; workerId++ {
-			turnReq := stubs.Request{World: b.getCurrentWorld()}
-			//receive response when ready (in any order) via the out channel
-			go func(workerId int){
-				turnRes := new(stubs.Response)
-				// done := make(chan *rpc.Call, 1)
-				workers[workerId].Lock.Lock()
-				workers[workerId].Connection.Call(stubs.TurnHandler, turnReq, turnRes)
-				workers[workerId].Lock.Unlock()
-				out <- turnRes
-			}(workerId)
-		}
-
-		//gather the work piecewise
-		for worker := 0; worker < b.Threads; worker++ {
-			turnRes := <-out
-			turnResponses[turnRes.ID] = *turnRes
-		}
+	exitLoop := false
+	for i < b.Turns && !exitLoop {
+		select {
+			case <-finishTurns:
+				exitLoop = true
+			default:
+				turnResponses := make([]stubs.Response, noWorkers)
+				//send a turn request to each worker selected
+				for workerId := 0; workerId < b.Threads; workerId++ {
+					turnReq := stubs.Request{World: b.getCurrentWorld()}
+					//receive response when ready (in any order) via the out channel
+					go func(workerId int){
+						turnRes := new(stubs.Response)
+						// done := make(chan *rpc.Call, 1)
+						workers[workerId].Lock.Lock()
+						workers[workerId].Connection.Call(stubs.TurnHandler, turnReq, turnRes)
+						workers[workerId].Lock.Unlock()
+						out <- turnRes
+					}(workerId)
+				}
 
 
-		rowNum := 0
-		
-		for _, response := range turnResponses {
-			strip := response.Strip
-			for rowIndex := 0; rowIndex < len(strip); rowIndex++ {
+
+				//gather the work piecewise
+				for worker := 0; worker < b.Threads; worker++ {
+					turnRes := <-out
+					turnResponses[turnRes.ID] = *turnRes
+				}
+
+
+				rowNum := 0
+				
 				b.WorldsMut.Lock()
-				(*b.CurrentWorldPtr)[rowNum] = strip[rowIndex]
-				// b.setCurrentWorldRow(rowNum, row)
+
+				for responseId := 0; responseId < len(turnResponses); responseId++ {
+					strip := turnResponses[responseId].Strip 
+					for rowId := 0; rowId < len(strip); rowId++ {
+						b.setCurrentWorldRow(rowNum, strip[rowId])
+						rowNum++
+					}
+				}
+
 				b.WorldsMut.Unlock()
-				rowNum++
-			}
 
+				res.Turns++
+				//reconstruct the world to go again
+
+				b.AliveMut.Lock()
+				b.AliveTurnMut.Lock()
+				b.Alive, b.AliveTurn = b.getAliveCells(workers)
+				b.AliveMut.Unlock()
+				b.AliveTurnMut.Unlock()
+
+				// b.WorldsMut.Unlock()
+				b.TurnsMut.Lock()
+				i++
+				b.OnTurn = i
+				b.TurnsMut.Unlock()
 		}
-		res.Turns++
-		//reconstruct the world to go again
-
-		b.AliveMut.Lock()
-		b.AliveTurnMut.Lock()
-		b.Alive, b.AliveTurn = b.getAliveCells(workers)
-		b.AliveMut.Unlock()
-		b.AliveTurnMut.Unlock()
-
-		// b.WorldsMut.Unlock()
-		b.TurnsMut.Lock()
-		i++
-		b.OnTurn = i
-		b.TurnsMut.Unlock()
 	}
 
 	res.World = b.getCurrentWorld()
@@ -431,13 +476,19 @@ func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (
 
 
 func main() {
-	pAddr := flag.String("port", "8031", "Port to listen on")
+
+	pPort := flag.String("port", "8031", "Port to listen on")
+	pWorkerIPs := flag.String("worker_ips", "localhost", "Worker addresses for broker to connect to, enter as a comma separated list")
+
+	flag.Parse()
+
+	workerIPs = strings.Split(*pWorkerIPs, ",")
 	flag.Parse()
 	
 
 	rpc.Register(&Broker{})
-	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
-	fmt.Println("Listening on ", *pAddr)
+	listener, err := net.Listen("tcp", ":"+*pPort) //listening for the client
+	fmt.Println("Listening on ", *pPort)
 	
 	handleError(err)
 	
@@ -452,7 +503,7 @@ func main() {
 	runningCalls.Wait()
 	fmt.Println("Dead")
 	err = listener.Close()
-	handleError(err)
+	// handleError(err)
 
 	fmt.Println("Close broker")
 }

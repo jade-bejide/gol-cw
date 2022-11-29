@@ -27,33 +27,6 @@ Distributed part (2)
 // //constants
 const aliveCellsPollDelay = 2 * time.Second
 
-// func spreadWorkload(h int, threads int) []int {
-// 	splits := make([]int, threads+1)
-
-// 	splitSize := h / threads
-// 	extraRows := h % threads
-
-// 	index := 0
-// 	for i := 0; i <= h; i += splitSize {
-// 		splits[index] = i
-
-// 		//if a worker needs to take on extra rows (this will be at most one row by modulo law)
-// 		//add 1 to shuffle along accordingly
-// 		if extraRows > 0 && i > 0 {
-// 			splits[index]++
-// 			extraRows--
-// 			i++
-// 		}
-// 		index++
-// 	}
-// 	return splits
-// }
-
-
-
-
-
-
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
 	fmt.Printf("final %v; called on %v\n", p.Turns, currentTurn)
 
@@ -83,11 +56,13 @@ func finishServer(client *rpc.Client, c distributorChannels){
 func kill(client *rpc.Client, c distributorChannels) {
 	res := new(stubs.KillBrokerResponse)
 
-	err := client.Call(stubs.KillBroker, stubs.EmptyRequest{}, res)
+	client.Call(stubs.KillBroker, stubs.EmptyRequest{}, res)
 
-	if err != nil {
-		fmt.Println("Error: client couldn't kill nodes")
-	}
+	// if err != nil && err != "unexpected EOF" {
+	// 	fmt.Println("Error: client couldn't kill nodes", err)
+	// }
+
+
 	c.events <- FinalTurnComplete{CompletedTurns: res.OnTurn, Alive: res.Alive}
 }
 
@@ -106,7 +81,6 @@ func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
 			req := stubs.EmptyRequest{}
 
 			res := new(stubs.AliveResponse)
-			//func (client *Client) Go(serviceMethod string, args any, reply any, done chan *Call) *Call
 
 			broker.Call(stubs.BrokerAliveHandler, req, res)
 			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: len(res.Alive)}
