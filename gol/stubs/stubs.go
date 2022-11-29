@@ -24,6 +24,7 @@ type SetupRequest struct {
 	Slice Slice
 	Params Params
 	World [][]byte
+	Turn int
 }
 type SetupResponse struct {
 	ID int
@@ -50,24 +51,41 @@ type AliveResponse struct {
 	OnTurn int
 }
 
+var SaveWorldHandler = "Broker.SaveWorld"
+type WorldResponse struct {
+	World [][]byte
+	OnTurn int
+}
 var PollWorldHandler = "Gol.PollWorld"
 //EmptyRequest
 //Response
 
+var BrokerFinishHander = "Broker.Finish"
+
+type QuitWorldResponse struct {
+	OnTurn int
+	Alive [] util.Cell
+}
 var FinishHander = "Gol.Finish"
 //EmptyRequest
 //EmptyResponse
 
 var KillHandler = "Gol.Kill"
+
+var KillBroker = "Broker.KillBroker"
+type KillBrokerResponse struct {
+	OnTurn int
+	Alive []util.Cell
+}
 //EmptyRequest
 //EmptyResponse
 
+var BrokerPauseHandler = "Broker.PauseGol"
 var PauseHandler = "Gol.PauseGol"
 type PauseRequest struct {
 	Pause bool
 }
 type PauseResponse struct {
-    World [][]byte
     Turns int
 }
 
@@ -75,6 +93,7 @@ var ClientHandler = "Broker.AcceptClient"
 type NewClientRequest struct {
 	World [][]byte
 	Params Params
+	Continue bool
 }
 type NewClientResponse struct {
 	World [][]byte
