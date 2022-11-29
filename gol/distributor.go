@@ -3,6 +3,7 @@ package gol
 import (
 	"fmt"
 	"net/rpc"
+	"os"
 	_ "sync"
 	"time"
 	_ "time"
@@ -191,6 +192,10 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	brokerReq := stubs.NewClientRequest{World: world, Params: params}
 	brokerRes := new(stubs.NewClientResponse)
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
+	if brokerRes.Turns == -1 {
+		fmt.Println("Fatal error: Broker unable to connect to all worker nodes")
+		os.Exit(1)
+	}
 	fmt.Println("Broker finished!")
 	//for _, row := range brokerRes.World {
 	//	fmt.Println(row)
