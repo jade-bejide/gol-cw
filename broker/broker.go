@@ -139,22 +139,6 @@ func (b *Broker) getHalos(y1 int, y2 int) ([]byte, []byte) {
 	return topHalo, botHalo
 }
 
-func showMatrix(m [][]uint8) {
-	for _, row := range m {
-		for _, elem := range row {
-			var str string
-			if elem == 255 {
-				str = "##"
-			} else {
-				str = "[]"
-			}
-			fmt.Printf("%s", str)
-		}
-		fmt.Println("")
-	}
-	return
-}
-
 func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	//threads
 	//world
@@ -193,10 +177,6 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 		y2 := workSpread[workerId+1]
 		topHalo, bottomHalo := b.getHalos(y1, y2)
 		sliceWithHalos := append(append([][]uint8{topHalo}, b.InWorld[y1:y2]...), bottomHalo)
-
-		for _, row := range sliceWithHalos {
-			fmt.Println(len(row))
-		}
 
 		setupReq := stubs.SetupRequest{
 			ID:     workerId,
@@ -245,7 +225,6 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 				handleError(err)
 			}
 			// <-done
-			fmt.Println(turnRes)
 			out <- turnRes
 		}()
 	}
@@ -261,13 +240,10 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 	b.WorldsMut.Lock()
 	for k, _ := range turnResponses {
 		workerResp := turnResponses[k].Slice
-		showMatrix(workerResp)
-		//fmt.Println(workerResp)
 		for j, _ := range workerResp {
 			b.OutWorld[row] = workerResp[j]
 			row++
 		}
-		fmt.Println("SLICE")
 	}
 	// b.alternateWorld()
 	//reconstruct the world to go again
@@ -279,7 +255,6 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 	res.Turns = b.Turns
 	res.Alive = b.Alive
 	res.World = b.OutWorld
-	fmt.Println(b.Alive)
 	b.TurnsMut.Unlock()
 	b.AliveMut.Unlock()
 
