@@ -21,7 +21,7 @@ func spreadWorkload(h int, threads int) []int {
 	splits := make([]int, threads+1)
 
 	splitSize := h / threads
-	extraRows := h % threads
+	extraRows := h - (spliteSize * threads)
 
 	index := 0
 	for i := 0; i <= h; i += splitSize {
@@ -165,7 +165,6 @@ func (b *Broker) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err
 func (b *Broker) setUpWorkers() (issue string) {
 	b.Workers = make([]Worker, b.Threads)
 	for i := 0; i < b.Threads; i++ {
-		fmt.Println("Loop")
 		b.Workers[i].Lock.Lock()
 		b.Workers[i].Ip = "localhost:"+strconv.Itoa(8032+i)
 		b.Workers[i].Ip = workerIPs[i];
@@ -361,7 +360,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 
 	// if len(workers) == 0 { return } //let client know that there are no workers available
 
-	noWorkers := len(b.Workers)
+	noWorkers := b.Threads
 
 	out := make(chan *stubs.Response, b.Threads)
 
@@ -461,7 +460,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		worker.Connection.Close()
 	}
 
-	fmt.Println("Finished")
 
 	return
 }
