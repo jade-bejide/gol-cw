@@ -282,7 +282,7 @@ func (b *Broker) getCurrentTurn() int {
 func (b *Broker) checkWorkerAddresses(threads int) (issue string) {
 	//fmt.Println("what")
 
-	if threads != len(workerIPs) {
+	if threads > len(workerIPs) {
 		//fmt.Println("not enough worker addresses")
 		return "not enough addresses"
 	}
@@ -459,6 +459,8 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 	for _, worker := range workers {
 		worker.Connection.Close()
 	}
+
+	fmt.Println("Finished")
 
 	return
 }

@@ -191,6 +191,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	brokerRes := new(stubs.NewClientResponse)
 
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
+	kill(client, c)
 
 	// <-call.Done
 	<-killServer
@@ -205,7 +206,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	final := FinalTurnComplete{CompletedTurns: brokerRes.Turns, Alive: brokerRes.Alive}
-
+	
 	c.events <- final //sending event down events channel
 	//
 	sendWriteCommand(p, c, brokerRes.Turns, brokerRes.World)
