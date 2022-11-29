@@ -6,12 +6,14 @@ import (
 	"net"
 	"net/rpc"
 	"os"
-	"strconv"
+	"strings"
 	"sync"
 
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
+
+var workerIPs []string
 
 func spreadWorkload(h int, threads int) []int {
 	splits := make([]int, threads+1)
@@ -110,17 +112,40 @@ func (b *Broker) getAliveCells(workers []Worker) {
 }
 
 //connect to the workers in a loop
-func (b *Broker) setUpWorkers() {
+func (b *Broker) setUpWorkers() (issue string) {
 	b.Workers = make([]Worker, b.Threads)
 	for i := 0; i < b.Threads; i++ {
-		b.Workers[i].Ip = "localhost:" + strconv.Itoa(8032+i)
-
+		b.Workers[i].Lock.Lock(); //defer b.Workers[i].Lock.Unlock()
+		//b.Workers[i].Ip = "localhost:"+strconv.Itoa(8032+i)
+		//
+		b.Workers[i].Ip = workerIPs[i];
+		fmt.Println("Dials", workerIPs[i])
 		client, err := rpc.Dial("tcp", b.Workers[i].Ip)
 
-		handleError(err)
+		if err != nil {
+			b.Workers[i].Lock.Unlock()
+			fmt.Println("Failed to dial")
+			issue = err.Error()
+			return
+		}
 		b.Workers[i].Connection = client
+		b.Workers[i].Lock.Unlock()
+	}
+	return ""
+}
+
+func (b *Broker) checkWorkerAddresses(threads int) (issue string) {
+	//fmt.Println("what")
+
+	if threads > len(workerIPs) {
+		//fmt.Println("not enough worker addresses")
+		issue = "not enough addresses"
+		return
 	}
 
+	//fmt.Println("workers set up")
+	issue = b.setUpWorkers()
+	return
 }
 
 func (b *Broker) getHalos(y1 int, y2 int) ([]byte, []byte) {
@@ -152,7 +177,14 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 	b.Params = req.Params
 	b.Threads = req.Params.Threads
 
-	b.setUpWorkers()
+	issue := b.checkWorkerAddresses(req.Params.Threads)
+	if(issue != ""){
+		fmt.Println("Error checking workers & addresses:", issue)
+		res.Alive = []util.Cell{}
+		res.Turns = -1
+		res.World = [][]uint8{}
+		return
+	}
 
 	b.TurnsMut.Lock()
 	b.Turns = req.Params.Turns
@@ -166,6 +198,8 @@ func (b *Broker) AcceptClient(req stubs.NewClientRequest, res *stubs.NewClientRe
 	if len(workers) == 0 {
 		return
 	} //let client know that there are no workers available
+
+
 
 	for workerId := 0; workerId < len(workers); workerId++ {
 		aboveID := (workerId - 1 + len(workers)) % len(workers)
@@ -278,13 +312,16 @@ func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (
 }
 
 func main() {
-	pAddr := flag.String("port", "8031", "Port to listen on")
+	pPort := flag.String("port", "8031", "Port to listen on")
+	pWorkerIPs := flag.String("worker_ips", "localhost:8032,localhost:8033", "Worker addresses for broker to connect to, enter as a comma separated list")
 	flag.Parse()
+
+	workerIPs = strings.Split(*pWorkerIPs, ",")
 
 	b := Broker{}
 	rpc.Register(&b)
-	listener, err := net.Listen("tcp", ":"+*pAddr) //listening for the client
-	fmt.Println("Listening on ", *pAddr)
+	listener, err := net.Listen("tcp", ":"+*pPort) //listening for the client
+	fmt.Println("Listening on ", *pPort)
 
 	handleError(err)
 	defer listener.Close()
