@@ -1,6 +1,7 @@
 package gol
 
 import (
+	"errors"
 	"net/rpc"
 )
 
@@ -13,7 +14,7 @@ type Params struct {
 }
 
 // Run starts the processing of Game of Life. It should initialise channels and goroutines.
-func Run(p Params, events chan<- Event, keyPresses <-chan rune, cont bool) {
+func Run(p Params, events chan<- Event, keyPresses <-chan rune, cont... bool) {
 	/*
 		inputs
 			p -> CL arguments
@@ -50,8 +51,18 @@ func Run(p Params, events chan<- Event, keyPresses <-chan rune, cont bool) {
 	server := "localhost:8031" //to dial the broker
 	//adding rpc "server" to make call for work to ()
 	client, err := rpc.Dial("tcp", server)
+
+	var carryOn bool
+	if len(cont) == 0 {
+		carryOn = false //default value
+	} else if len(cont) == 1 {
+		carryOn = cont[0]
+	}else{
+		err = errors.New("Error: no way to interpret value(s) of 'cont'")
+	}
+
 	if(err != nil) { panic(err) } //rudimentary error handling
 	defer client.Close()
 
-	distributor(p, distributorChannels, keyPresses, client, cont)
+	distributor(p, distributorChannels, keyPresses, client, carryOn)
 }
