@@ -191,10 +191,10 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	brokerRes := new(stubs.NewClientResponse)
 
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
-	kill(client, c)
+	//kill(client, c)
 
 	// <-call.Done
-	<-killServer
+	//<-killServer
 	//world = res.World
 	//alive = res.Alive
 	//turns = res.Turn

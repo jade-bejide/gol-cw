@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
-	"sync"
 	"strconv"
+	"strings"
+	"sync"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
-	"strings"
 )
 
 var kill = make(chan bool, 1)
@@ -352,6 +352,7 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		return
 	}
 
+	fmt.Println("I love printing like aw yeah!")
 
 	workers := b.Workers
 
