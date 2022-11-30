@@ -115,7 +115,6 @@ func (b *Broker) getCurrentWorld() [][]byte{
 
 
 func (b *Broker) getAliveCells(workers []Worker) ([]util.Cell, int) { //mutex locks aren't helpful here when seting global variabls of broker
-	//fmt.Println(b.Workers)
 	b.TurnsMut.Lock(); defer b.TurnsMut.Unlock() //sync with pause
 	alive := make([]util.Cell, 0)
 	var onTurn int
@@ -126,8 +125,6 @@ func (b *Broker) getAliveCells(workers []Worker) ([]util.Cell, int) { //mutex lo
 		workers[workerId].Lock.Unlock()
 		alive = append(alive, aliveRes.Alive...)
 		onTurn = aliveRes.OnTurn
-
-		fmt.Println(onTurn)
 	}
 
 	return alive, onTurn
@@ -181,7 +178,6 @@ func (b *Broker) setUpWorkers() (issue string) {
 			return
 		}
 
-		//handleError(err)
 		b.Workers[i].Connection = client
 		b.Workers[i].Lock.Unlock()
 	}
@@ -212,7 +208,6 @@ func (b *Broker) KillBroker(req stubs.EmptyRequest, res *stubs.KillBrokerRespons
 
 		fmt.Println("Attempting to kill worker", workerId)
 		b.Workers[workerId].Connection.Call(stubs.KillHandler, stubs.EmptyRequest{}, &stubs.EmptyResponse{})
-		// handleError(err)
 		b.Workers[workerId].Connection.Close()
 		fmt.Println("Killed worker", workerId)
 
@@ -268,8 +263,10 @@ func (b *Broker) wakeUp() {
 }
 
 func (b *Broker) setCurrentWorldRow(rowIndex int, row []byte) {
-	// b.WorldsMut.Lock(); defer b.WorldsMut.Unlock()
-	(*b.CurrentWorldPtr)[rowIndex] = row
+	for i := 0; i < len(row); i++ {
+		(*b.CurrentWorldPtr)[rowIndex][i] = row[i]
+	}
+
 }
 
 func (b *Broker) getCurrentTurn() int {
@@ -279,14 +276,11 @@ func (b *Broker) getCurrentTurn() int {
 }
 
 func (b *Broker) checkWorkerAddresses(threads int) (issue string) {
-	//fmt.Println("what")
 
 	if threads > len(workerIPs) {
-		//fmt.Println("not enough worker addresses")
 		return "not enough addresses"
 	}
 
-	//fmt.Println("workers set up")
 	issue = b.setUpWorkers()
 	return issue
 }
@@ -294,9 +288,6 @@ func (b *Broker) checkWorkerAddresses(threads int) (issue string) {
 func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientResponse) (err error) {
 	runningCalls.Add(1); defer runningCalls.Done()
 	var i int
-
-
-	b.brokerDebug()
 
 	if b.Idle { 
 		b.wakeUp()
@@ -314,8 +305,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 			b.TurnsMut.Lock()
 			b.Turns = req.Params.Turns
 			b.TurnsMut.Unlock()
-
-
 
 			i = 0
 		} else { 
@@ -336,8 +325,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		b.Turns = req.Params.Turns
 		b.TurnsMut.Unlock()
 
-
-
 		i = 0
 	}
 
@@ -351,25 +338,10 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 		return
 	}
 
-	fmt.Println("I love printing like aw yeah!")
-
 	workers := b.Workers
-
-	// workers := takeWorkers(b)
-	
-
-	// if len(workers) == 0 { return } //let client know that there are no workers available
-
 	noWorkers := b.Threads
 
 	out := make(chan *stubs.Response, b.Threads)
-
-	if b.Params.Turns == 0 {
-		res.Alive, _ = b.getAliveCells(workers)
-		res.Turns = b.Turns
-		res.World = b.getCurrentWorld()
-		return
-	}
 
 
 	//send work to the gol workers
@@ -401,7 +373,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 					//receive response when ready (in any order) via the out channel
 					go func(workerId int){
 						turnRes := new(stubs.Response)
-						// done := make(chan *rpc.Call, 1)
 						workers[workerId].Lock.Lock()
 						workers[workerId].Connection.Call(stubs.TurnHandler, turnReq, turnRes)
 						workers[workerId].Lock.Unlock()
@@ -441,7 +412,6 @@ func (b *Broker) AcceptClient (req stubs.NewClientRequest, res *stubs.NewClientR
 				b.AliveMut.Unlock()
 				b.AliveTurnMut.Unlock()
 
-				// b.WorldsMut.Unlock()
 				b.TurnsMut.Lock()
 				i++
 				b.OnTurn = i
@@ -468,7 +438,6 @@ func (b *Broker) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (
 	runningCalls.Add(1); defer runningCalls.Done()
 	b.AliveMut.Lock(); defer b.AliveMut.Unlock()
 	b.AliveTurnMut.Lock(); defer b.AliveTurnMut.Unlock()
-	// b.TurnsMut.Lock(); defer b.TurnsMut.Unlock()
 	res.Alive = b.Alive
 	res.OnTurn = b.AliveTurn
 	return
@@ -496,17 +465,11 @@ func main() {
 	handleError(err)
 	
 	go rpc.Accept(listener)
-	fmt.Println("Setting up workers")
-	// broker.setUpWorkers()
-	fmt.Println("Set up workers")
 
-	fmt.Println("Dying...")
 	<-kill
 	//wait for the calls to terminate before I kill myself
 	runningCalls.Wait()
-	fmt.Println("Dead")
 	err = listener.Close()
-	// handleError(err)
 
 	fmt.Println("Close broker")
 }

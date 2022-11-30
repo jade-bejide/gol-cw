@@ -2,13 +2,10 @@ package main
 
 import (
 	"flag"
-	_ "flag"
 	"fmt"
 	_ "math/rand"
 	"net"
-	_ "net"
 	"net/rpc"
-	_ "net/rpc"
 	"sync"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -90,31 +87,6 @@ func calculateNextState(g *Gol, p stubs.Params, /*c distributorChannels, */world
 	}
 }
 
-//func takeTurns(g *Gol){
-//	g.TurnMut.Lock()
-//
-//	g.setTurn(0)
-//
-//	for g.Turn < g.Params.Turns {
-//		select{
-//			case <-g.Done:
-//				g.TurnMut.Unlock()
-//				return
-//			default:
-//        		g.TurnMut.Unlock()
-//				g.WorldMut.Lock() //block if we're reading the current alive cells
-//				g.World = calculateNextState(g.Params, /*_,*/ g.World, 0, g.Params.ImageHeight, g.Turn)
-//				g.setTurn(g.Turn + 1)
-//				g.WorldMut.Unlock() //allow us to report the alive cells on the following turn (once we're done here)
-//        		g.TurnMut.Lock()
-//				//c.events <- TurnComplete{turn}
-//		}
-//
-//	}
-//	g.TurnMut.Unlock()
-//	return
-//}
-
 func (g *Gol) calculateAliveCells(p stubs.Params, world [][]byte) []util.Cell {
 	var cells []util.Cell
 
@@ -136,7 +108,6 @@ func (g *Gol) aliveStrip() []util.Cell {
 	height := g.Slice.To - g.Slice.From
 	for x := 0; x < g.Params.ImageWidth; x++ {
 		for y := 0; y < height; y++ {
-			// fmt.Println(y, "+", g.Slice.From,  "=", y+g.Slice.From)
 			if isAlive(x, y, g.Strip) {
 				c := util.Cell{x, y+g.Slice.From}
 				cells = append(cells, c)
@@ -148,17 +119,6 @@ func (g *Gol) aliveStrip() []util.Cell {
 }
 
 func resetGol(g *Gol){
-
-	//g.WorldMut.Lock()
-	//g.TurnMut.Lock()
-	//
-	//g.Params = stubs.Params{}
-	//g.World = make([][]uint8, 0)
-	//g.Turn = 0
-	//g.Done = make(chan bool, 1)
-	//
-	//g.TurnMut.Unlock()
-	//g.WorldMut.Unlock()
 
 	g.setParams(stubs.Params{})
 	g.setWorld(make([][]uint8, 0))
@@ -288,20 +248,6 @@ func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 	return
 }
 
-//func (g *Gol) PauseGol(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
-//	runningCalls.Add(1); defer runningCalls.Done()
-//	if req.Pause {
-//	    g.WorldMut.Lock()
-//	    g.TurnMut.Lock()
-//	    res.World = g.World
-//	    res.Turns = g.Turn
-//	} else {
-//	    res.Turns = g.Turn
-//	    g.WorldMut.Unlock()
-//	    g.TurnMut.Unlock()
-//	 }
-//	return
-//}
 
 
 func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err error){
@@ -319,23 +265,6 @@ func (g *Gol) ReportAlive(req stubs.EmptyRequest, res *stubs.AliveResponse) (err
 
 	return
 }
-
-//func (g *Gol) PollWorld(req stubs.EmptyRequest, res *stubs.Response) (err error){
-//	runningCalls.Add(1); defer runningCalls.Done()
-//
-//	g.WorldMut.Lock()
-//	g.TurnMut.Lock()
-//	res.World = g.World
-//	res.Turn = g.Turn
-//	res.Alive = calculateAliveCells(g.Params, g.World)
-//	g.TurnMut.Unlock()
-//	g.WorldMut.Unlock()
-//	//fmt.Println("I am responding with the world on turn", res.Turn)
-//	//fmt.Printf("The world looks like")
-//	//fmt.Println(res.World)
-//
-//	return
-//}
 
 //asks the only looping rpc call to finish when ready (takeTurns())
 func (g *Gol) Finish(req stubs.EmptyRequest, res *stubs.EmptyResponse) (err error){
@@ -368,7 +297,7 @@ func runServer(s *rpc.Server, l *net.Listener){
 func main() {
 	portPtr := flag.String("port", "8030", "port used; default: 8030")
 	flag.Parse()
-	//rand.Seed(time.Now().UnixNano())
+
 	server := rpc.NewServer()
 	err := server.Register(&Gol{})
 	if err != nil {

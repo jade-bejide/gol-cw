@@ -5,9 +5,7 @@ import (
 	"net/rpc"
 	"sync"
 	"time"
-	_ "time"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
-	//"uk.ac.bris.cs/gameoflife/util"
 )
 
 type distributorChannels struct {
@@ -28,7 +26,6 @@ Distributed part (2)
 const aliveCellsPollDelay = 2 * time.Second
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
-	fmt.Printf("final %v; called on %v\n", p.Turns, currentTurn)
 
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
 	c.ioCommand <- ioOutput
@@ -58,11 +55,6 @@ func kill(client *rpc.Client, c distributorChannels) {
 
 	client.Call(stubs.KillBroker, stubs.EmptyRequest{}, res)
 
-	// if err != nil && err != "unexpected EOF" {
-	// 	fmt.Println("Error: client couldn't kill nodes", err)
-	// }
-
-
 	c.events <- FinalTurnComplete{CompletedTurns: res.OnTurn, Alive: res.Alive}
 }
 
@@ -73,7 +65,6 @@ func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
 	//newRound :=
 	ticker := time.NewTicker(aliveCellsPollDelay)
 	for {
-		// paused.Lock()
 		select {
 		case <-done:
 			return
@@ -85,7 +76,6 @@ func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
 			broker.Call(stubs.BrokerAliveHandler, req, res)
 			c.events <- AliveCellsCount{CompletedTurns: res.OnTurn, CellsCount: len(res.Alive)}
 		}
-		// paused.Unlock()
 	}
 }
 
@@ -103,9 +93,6 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 			remoteDone := make(chan *rpc.Call, 1)
 			call := client.Go(stubs.SaveWorldHandler, req, res, remoteDone)
 			<-call.Done
-			//fmt.Println("CALL FINSIHED FROM KEYPRESSER ", call.ServiceMethod)
-			//fmt.Println("RESPONSE TURNS", res, "REPLY TURNS", call.Reply)
-
 			fmt.Println("Generating PGM")
 			sendWriteCommand(p, c, res.OnTurn, res.World)
 			fmt.Println("Generated PGM")
@@ -159,7 +146,7 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 
 	world := make([][]byte, p.ImageHeight)
 
-	// if !cont {
+
 	for y := 0; y < p.ImageHeight; y++ {
 		world[y] = make([]byte, p.ImageWidth)
 		for x := 0; x < p.ImageWidth; x++ {
@@ -167,23 +154,13 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 			world[y][x] = pixel
 		}
 	}
-	// }
 
-
-	//doneTakeTurns  := make(chan bool)
 	killServer := make(chan bool, 1)
 	go handleKeyPresses(p, c, client, keyPresses, killServer)
-	//
-    //req := stubs.Request{World: world, Params: stubs.Params(p)}
-    //res := new(stubs.Response)
-	//
+
 	done := make(chan bool)
 	go ticks(c, client, done)
-	//
-	// remoteDone := make(chan *rpc.Call, 1)
-    //call := client.Go(stubs.TurnsHandler, req, res, remoteDone)
-	//var alive []util.Cell
-	//var turns int
+
 
 	params := stubs.Params{Turns: p.Turns, Threads: p.Threads, ImageWidth: p.ImageWidth, ImageHeight: p.ImageHeight}
 
@@ -191,18 +168,6 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	brokerRes := new(stubs.NewClientResponse)
 
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
-	//kill(client, c)
-
-	// <-call.Done
-	//<-killServer
-	//world = res.World
-	//alive = res.Alive
-	//turns = res.Turn
-	// select {
-	// 	case <-killServer:
-	// 		client.Go(stubs.KillHandler, stubs.EmptyRequest{}, new(stubs.EmptyResponse), nil)
-	// 	default:
-	// }
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	final := FinalTurnComplete{CompletedTurns: brokerRes.Turns, Alive: brokerRes.Alive}
