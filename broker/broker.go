@@ -21,7 +21,7 @@ func spreadWorkload(h int, threads int) []int {
 	splits := make([]int, threads+1)
 
 	splitSize := h / threads
-	extraRows := h - (spliteSize * threads)
+	extraRows := h - (splitSize * threads)
 
 	index := 0
 	for i := 0; i <= h; i += splitSize {
