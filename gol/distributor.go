@@ -305,15 +305,16 @@ func (g *Gol) handleSDL(p Params, c distributorChannels, keyPresses <-chan rune,
 			if !paused {
 				g.TurnsMut.Lock()
 				c.events <- StateChange{CompletedTurns: g.Turns, NewState: Paused}
-				g.TurnsMut.Unlock()
+
 				g.WorldMut.Lock()
 
 				sendWriteCommand(p, c, g.Turns, *g.World)
+				//g.TurnsMut.Unlock()
 
 				paused = true
 				fmt.Println("Paused on turn", g.Turns)
 			} else {
-				g.TurnsMut.Lock()
+				//g.TurnsMut.Lock()
 				c.events <- StateChange{CompletedTurns: g.Turns, NewState: Executing}
 				g.TurnsMut.Unlock()
 
