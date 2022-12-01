@@ -5,6 +5,7 @@ import (
 	"net/rpc"
 	"sync"
 	"time"
+	// "os"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 )
 
@@ -26,7 +27,7 @@ Distributed part (2)
 const aliveCellsPollDelay = 2 * time.Second
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
-
+	fmt.Println("World", len(currentWorld))
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
 	c.ioCommand <- ioOutput
 	c.ioFilename <- filename
@@ -50,12 +51,16 @@ func finishServer(client *rpc.Client, c distributorChannels){
 	c.events <- FinalTurnComplete{CompletedTurns: res.OnTurn, Alive: res.Alive}
 }
 
-func kill(client *rpc.Client, c distributorChannels) {
+func kill(p Params, client *rpc.Client, c distributorChannels, done chan bool) {
 	res := new(stubs.KillBrokerResponse)
 
-	client.Call(stubs.KillBroker, stubs.EmptyRequest{}, res)
-
+	err := client.Call(stubs.KillBroker, stubs.EmptyRequest{}, res)
+	fmt.Println(err)
+	sendWriteCommand(p, c, res.OnTurn, res.World)
 	c.events <- FinalTurnComplete{CompletedTurns: res.OnTurn, Alive: res.Alive}
+	
+	
+	
 }
 
 var paused sync.Mutex
@@ -70,7 +75,6 @@ func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
 			return
 		case <-ticker.C:
 			req := stubs.EmptyRequest{}
-
 			res := new(stubs.AliveResponse)
 
 			broker.Call(stubs.BrokerAliveHandler, req, res)
@@ -79,7 +83,7 @@ func ticks(c distributorChannels, broker *rpc.Client, done <-chan bool) {
 	}
 }
 
-func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, killServer chan<- bool) {
+func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPresses <-chan rune, killServer chan<- bool, done chan bool) {
 	isPaused := false
 	for {
 		k := <-keyPresses
@@ -104,7 +108,7 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 		case 'k':
 			//request closure of server through stubs package
 			fmt.Println("Closing all components of the distributed system")
-			kill(client, c)
+			kill(p, client, c, done)
 			killServer <- true
 			return
 		case 'p':
@@ -135,6 +139,18 @@ func handleKeyPresses(p Params, c distributorChannels, client *rpc.Client, keyPr
 	}
 }
 
+func safeClose(c distributorChannels, done chan bool) {
+	// Make sure that the Io has finished any output before exiting.
+	c.ioCommand <- ioCheckIdle
+	<-c.ioIdle
+
+	
+	//
+	done <- true
+	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+	close(c.events)
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client *rpc.Client, cont bool) {
 	// TODO: Create a 2D slice to store the world.
@@ -156,9 +172,10 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	}
 
 	killServer := make(chan bool, 1)
-	go handleKeyPresses(p, c, client, keyPresses, killServer)
-
 	done := make(chan bool)
+	go handleKeyPresses(p, c, client, keyPresses, killServer, done)
+
+	
 	go ticks(c, client, done)
 
 
@@ -170,19 +187,20 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 	client.Call(stubs.ClientHandler, brokerReq, brokerRes)
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
-	final := FinalTurnComplete{CompletedTurns: brokerRes.Turns, Alive: brokerRes.Alive}
+	select {
+		case <-killServer:
+			safeClose(c, done)
+		default:
+			final := FinalTurnComplete{CompletedTurns: brokerRes.Turns, Alive: brokerRes.Alive}
 	
-	c.events <- final //sending event down events channel
-	//
-	sendWriteCommand(p, c, brokerRes.Turns, brokerRes.World)
+			c.events <- final //sending event down events channel
+			fmt.Println("Ready to save")
+			sendWriteCommand(p, c, brokerRes.Turns, brokerRes.World)
+		
+		
+			// c.events <- StateChange{brokerRes.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
+		
+			safeClose(c, done)
+	}
 
-	// Make sure that the Io has finished any output before exiting.
-	c.ioCommand <- ioCheckIdle
-	<-c.ioIdle
-
-	//c.events <- StateChange{turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
-	//
-	done <- true
-	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	close(c.events)
 }

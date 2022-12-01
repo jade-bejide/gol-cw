@@ -75,6 +75,7 @@ var KillHandler = "Gol.Kill"
 var KillBroker = "Broker.KillBroker"
 type KillBrokerResponse struct {
 	OnTurn int
+	World [][]byte
 	Alive []util.Cell
 }
 //EmptyRequest

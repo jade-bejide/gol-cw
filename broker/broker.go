@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"time"
 	"net/rpc"
 	"strconv"
 	"strings"
@@ -12,38 +13,10 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
-var kill = make(chan bool, 1)
+var kill = make(chan bool, 0)
 var finishTurns = make(chan bool, 1) //to safely quit the Gol for loop
 var runningCalls = sync.WaitGroup{}
 var workerIPs []string
-
-func spreadWorkload(h int, threads int) []int {
-	splits := make([]int, threads+1)
-
-	splitSize := h / threads
-	extraRows := h - (splitSize * threads)
-
-	index := 0
-	for i := 0; i <= h; i += splitSize {
-		splits[index] = i
-
-		//if a worker needs to take on extra rows (this will be at most one row by modulo law)
-		//add 1 to shuffle along accordingly
-		if extraRows > 0 && i > 0 {
-			splits[index]++
-			extraRows--
-			i++
-		}
-		index++
-	}
-	return splits
-}
-type ClientTask struct {
-	Client *rpc.Client
-	Threads int
-	World [][]byte
-	Turns int
-}
 
 type Worker struct {
 	Ip string
@@ -79,6 +52,28 @@ func (b *Broker) brokerDebug() {
 	fmt.Println("Params", b.Params)
 
 	fmt.Println()
+}
+
+func spreadWorkload(h int, threads int) []int {
+	splits := make([]int, threads+1)
+
+	splitSize := h / threads
+	extraRows := h - (splitSize * threads)
+
+	index := 0
+	for i := 0; i <= h; i += splitSize {
+		splits[index] = i
+
+		//if a worker needs to take on extra rows (this will be at most one row by modulo law)
+		//add 1 to shuffle along accordingly
+		if extraRows > 0 && i > 0 {
+			splits[index]++
+			extraRows--
+			i++
+		}
+		index++
+	}
+	return splits
 }
 
 func handleError(err error) {
@@ -198,8 +193,8 @@ func (b *Broker) getTurn() int {
 }
 
 func (b *Broker) KillBroker(req stubs.EmptyRequest, res *stubs.KillBrokerResponse) (err error) {
+	// runningCalls.Add(1); defer func(){ ; runningCalls.Done() }()
 	runningCalls.Add(1); defer runningCalls.Done()
-
 	
 	b.WorldsMut.Lock(); b.TurnsMut.Lock();
 	finishTurns <- true
@@ -216,12 +211,17 @@ func (b *Broker) KillBroker(req stubs.EmptyRequest, res *stubs.KillBrokerRespons
 
 	res.Alive = b.getCurrentAliveCells()
 	res.OnTurn = b.OnTurn
+	res.World = b.WorldA
+	
 
 	b.WorldsMut.Unlock(); b.TurnsMut.Unlock()
+	
 
+	fmt.Println(len(res.World), len(res.World[0]))
 	kill <- true
 	
 	fmt.Println("Set to close when ready")
+	time.Sleep(1 * time.Second)
 	return
 }
 
@@ -253,19 +253,20 @@ func (b *Broker) Finish(req stubs.EmptyRequest, res *stubs.QuitWorldResponse) (e
 }
 
 
-//fault tolerance
+//fault tolerance - resuming work
 func (b *Broker) wakeUp() {
 	fmt.Println("Waking up")
 	b.Idle = false
-	b.setUpWorkers()
+	// b.AliveTurn = b.OnTurn
+	// b.setUpWorkers()
 	b.TurnsMut.Unlock()
 	b.WorldsMut.Unlock()
 }
 
 func (b *Broker) setCurrentWorldRow(rowIndex int, row []byte) {
-	for i := 0; i < len(row); i++ {
-		(*b.CurrentWorldPtr)[rowIndex][i] = row[i]
-	}
+
+	(*b.CurrentWorldPtr)[rowIndex] = row
+	
 
 }
 

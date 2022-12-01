@@ -210,7 +210,7 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 
 	resetGol(g)
 	g.setID(req.ID)
-	fmt.Println(g.ID, req.ID)
+
 	g.setSlice(req.Slice)
 	g.setParams(req.Params)
 	g.setWorld(req.World)
@@ -218,16 +218,12 @@ func (g *Gol) Setup(req stubs.SetupRequest, res *stubs.SetupResponse) (err error
 	err = g.setStrip()
 	res.Slice = req.Slice
 
-	fmt.Println(g.ID, g.Params, g.Slice)
-
 	return err
 }
 
 //RPC methods
 func (g *Gol) TakeTurn(req stubs.Request, res *stubs.Response) (err error){
 	runningCalls.Add(1); defer runningCalls.Done()
-	//
-	//fmt.Println("Taking turn")
 
 	g.setWorld(req.World)
 	calculateNextState(g, g.Params, /*_,*/ g.World, g.Slice.From, g.Slice.To, g.Turn)
