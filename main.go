@@ -13,7 +13,6 @@ import (
 func main() {
 	runtime.LockOSThread()
 	var params gol.Params
-	fmt.Println("Block?")
 	flag.IntVar(
 		&params.Threads,
 		"t",

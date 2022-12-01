@@ -5,7 +5,6 @@ import (
 	"net/rpc"
 	"sync"
 	"time"
-	// "os"
 	"uk.ac.bris.cs/gameoflife/gol/stubs"
 )
 
@@ -27,7 +26,6 @@ Distributed part (2)
 const aliveCellsPollDelay = 2 * time.Second
 
 func sendWriteCommand(p Params, c distributorChannels, currentTurn int, currentWorld [][]byte) {
-	fmt.Println("World", len(currentWorld))
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, currentTurn)
 	c.ioCommand <- ioOutput
 	c.ioFilename <- filename
@@ -197,8 +195,6 @@ func distributor(p Params, c distributorChannels, keyPresses <-chan rune, client
 			fmt.Println("Ready to save")
 			sendWriteCommand(p, c, brokerRes.Turns, brokerRes.World)
 		
-		
-			// c.events <- StateChange{brokerRes.Turns, Quitting} //passed in the total turns complete as being that which we set out to complete, as otherwise we would have errored
 		
 			safeClose(c, done)
 	}
